@@ -36,6 +36,10 @@ This rule is an index, not the standard. Before writing or reviewing SQL, open t
 
 Summarise a plan before reading it: `python3 skills/pgsql-performance/scripts/plan-summary.py plan.txt`, from the plugin root, prints where the time goes and where a row-estimate error starts. For a plan over about 50 lines or two plans to compare, use the `pgsql-plan-analyst` agent with the plan in a file.
 
+## Reviewing SQL
+
+For a focused review of `.sql` files, migrations or query strings in Go or PHP code, use the `pgsql-reviewer` agent. It loads the skills, returns findings ranked by severity, and edits nothing.
+
 ## Running SQL against a database
 
 Use `psql` only against a database the user names, never production without explicit consent. `EXPLAIN ANALYZE` executes the statement: wrap an `INSERT`, `UPDATE`, `DELETE` or `MERGE` in `BEGIN; ... ROLLBACK;`. Say how much data a plan ran on.
