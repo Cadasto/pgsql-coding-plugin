@@ -1,0 +1,59 @@
+---
+description: PostgreSQL coding standards for .sql files (PostgreSQL 18 floor, 19 additions as hints). Mirrors the pgsql-coding router skill for Cursor.
+globs: ["**/*.sql"]
+alwaysApply: false
+---
+
+# PostgreSQL coding standards
+
+This Cursor rule mirrors the `pgsql-coding` router skill. Apply it when editing SQL, and when a Go or PHP change carries SQL text. Two principles:
+
+- **Evidence beats reasoning.** A plan from `EXPLAIN (ANALYZE, BUFFERS)` decides whether an index or a rewrite helps. `squawk` decides whether a migration takes a dangerous lock. `plpgsql_check` finds PL/pgSQL errors. Run the tool; do not reason out what it decides.
+- **The floor is PostgreSQL 18.** PostgreSQL 19 additions are hints until the project's server runs 19. The router's `versions.md` reference lists what needs 17, 18 or 19.
+
+| Topic | Run (deterministic) | Skill |
+|---|---|---|
+| Writing or reviewing a statement: NULLs, joins, CTEs, window functions, pagination, upsert, `MERGE`, `RETURNING`, `COPY`, transactions, row and advisory locks, pgx or PDO binding, N+1 loops, tests | the test suite against a real PostgreSQL 18 | `pgsql-query` |
+| `json` and `jsonb`, `->`, `->>`, `@>`, jsonpath, `JSON_TABLE`, `JSON_VALUE`, jsonb indexes, JSON values in Go or PHP | `EXPLAIN` the predicate to see whether the index is used | `pgsql-jsonb` |
+| Tables, column types, keys, constraints, generated columns, `CREATE TYPE`, `CREATE DOMAIN`, views, partitions, functions and PL/pgSQL (dynamic SQL included), triggers, roles, row-level security | `plpgsql_check` for PL/pgSQL; `squawk` on the DDL | `pgsql-schema` |
+| Which index, column order, partial, expression or covering indexes, GIN, GiST, BRIN, `pg_trgm`, `text_pattern_ops`, unused, duplicate or invalid indexes (`pg_stat_user_indexes`, `pg_index`) | `EXPLAIN (ANALYZE, BUFFERS)` before and after; HypoPG for a what-if | `pgsql-indexing` |
+| A slow query, reading a plan, planner statistics, `CREATE STATISTICS`, generic plans and `plan_cache_mode`, `pg_stat_statements`, `pg_stat_activity`, `auto_explain`, lock waits, bloat | `EXPLAIN (ANALYZE, BUFFERS)`; `pg_stat_statements` | `pgsql-performance` |
+| A migration file, `ALTER TABLE` on a live table, `CREATE INDEX CONCURRENTLY`, `REINDEX CONCURRENTLY`, `NOT VALID` and `VALIDATE`, `ALTER TYPE ... ADD VALUE`, lock timeouts, backfills | `squawk <migration files>` | `pgsql-migrations` |
+| `.squawk.toml`, adding SQL linting to a repository or CI | none | `/pgsql-lint-setup` |
+
+## Route, then load
+
+This rule is an index, not the standard. Before writing or reviewing SQL, open the focused skill matching the change. It carries the cited rules and the judgment:
+
+- a query, a SQL string in `.go` or `.php` code, `JOIN`, `GROUP BY`, `ON CONFLICT`, `MERGE`, `COPY`, `FOR UPDATE`, `pg_advisory_*`, a transaction, `pgx.`, `pgxpool.`, `PDO` → `pgsql-query`
+- `jsonb`, `json`, `->`, `->>`, `@>`, `@?`, a `jsonb_*` or `JSON_*` function, `json.RawMessage` in a scan → `pgsql-jsonb`
+- `CREATE TABLE`, a column type, `CONSTRAINT`, `REFERENCES`, `GENERATED`, `PARTITION`, `CREATE TYPE`, `CREATE DOMAIN`, `CREATE VIEW`, `CREATE FUNCTION`, `EXECUTE format(`, `CREATE TRIGGER`, `POLICY`, `GRANT` → `pgsql-schema`
+- `CREATE INDEX`, `USING gin`, `gist` or `brin`, `INCLUDE`, a partial index, `gin_trgm_ops`, `text_pattern_ops`, `pg_stat_user_indexes`, `indisvalid` → `pgsql-indexing`
+- `EXPLAIN` output, "slow", `pg_stat_statements`, `pg_stat_activity`, `auto_explain`, `CREATE STATISTICS`, `plan_cache_mode`, a lock wait, a statement timeout → `pgsql-performance`
+- a file in a migrations folder, `ALTER TABLE`, `ALTER TYPE`, `DROP`, `RENAME`, `CONCURRENTLY`, `NOT VALID`, `VALIDATE CONSTRAINT`, `lock_timeout`, a backfill → `pgsql-migrations`
+
+## Reading a plan
+
+Summarise a plan before reading it: `python3 skills/pgsql-performance/scripts/plan-summary.py plan.txt`, from the plugin root, prints where the time goes and where a row-estimate error starts. For a plan over about 50 lines or two plans to compare, use the `pgsql-plan-analyst` agent with the plan in a file.
+
+## Running SQL against a database
+
+Use `psql` only against a database the user names, never production without explicit consent. `EXPLAIN ANALYZE` executes the statement: wrap an `INSERT`, `UPDATE`, `DELETE` or `MERGE` in `BEGIN; ... ROLLBACK;`. Say how much data a plan ran on.
+
+## Minimum checklist (when opening a skill is not affordable)
+
+- Bind every value as a parameter. An identifier that comes from input goes through an allowlist. Never format values into SQL text.
+- Use `NOT EXISTS`, not `NOT IN (subquery)`; use `IS DISTINCT FROM` when two NULLs must compare equal.
+- Give every `LIMIT` an `ORDER BY` that is unique. Page with a keyset (`WHERE (a, b) > ($1, $2)`), not a growing `OFFSET`.
+- Use `timestamptz`, `text`, `bigint GENERATED ALWAYS AS IDENTITY` or `uuidv7()`, and `numeric` for money. Index the referencing columns of a foreign key.
+- For jsonb, index the predicate shape the query uses: `@>` with a GIN index, `->>` with an expression index. Promote a key that every row has and every query filters on to a real column.
+- Propose no index or rewrite without a plan: `EXPLAIN (ANALYZE, BUFFERS)` before and after.
+- In migrations, set `lock_timeout` before DDL that takes a strong lock, build indexes `CONCURRENTLY` in a file that sets both timeouts to 0 (a short `lock_timeout` aborts the build), add constraints `NOT VALID` and validate them separately, and run `squawk`.
+
+## Writing for the human
+
+Anything a person reads goes in plain English, with the effect before the mechanism: "the second page repeats rows when two orders share a timestamp", not "non-unique sort key". SQL, identifiers, commands and setting names stay verbatim.
+
+When two forms return the same rows and both pass the tools, decide by: correct under NULLs and concurrent writes, then the measured plan on realistic data, then the form the PostgreSQL manual documents for that purpose, then the shorter statement. Say which of these decided it.
+
+Ground every judgment in a cited source: the PostgreSQL 18 manual, the release notes, the PostgreSQL wiki, the pgx and PDO documentation, and the squawk rule catalogue. Do not invent rules. Adopt the shipped squawk config (`references/squawk.toml`, at the **plugin root**; search the installed plugin directory for it, not this rule's own folder).

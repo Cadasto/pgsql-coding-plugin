@@ -1,0 +1,14 @@
+Limit  (cost=8302.27..8302.30 rows=10 width=28) (actual time=18.723..18.724 rows=0.00 loops=1)
+  Buffers: shared hit=2945
+  ->  Sort  (cost=8302.27..8315.03 rows=5103 width=28) (actual time=18.721..18.722 rows=0.00 loops=1)
+        Sort Key: created
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=2945
+        ->  Seq Scan on o  (cost=0.00..8192.00 rows=5103 width=28) (actual time=18.703..18.703 rows=0.00 loops=1)
+              Filter: ((amt < '50'::numeric) AND ((id % '1000'::bigint) >= 950))
+              Rows Removed by Filter: 300000
+              Buffers: shared hit=2942
+Planning:
+  Buffers: shared hit=124
+Planning Time: 0.298 ms
+Execution Time: 18.742 ms

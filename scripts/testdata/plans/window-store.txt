@@ -1,0 +1,10 @@
+WindowAgg  (cost=9691.97..9692.00 rows=300000 width=16) (actual time=47.893..67.235 rows=300000.00 loops=1)
+  Window: w1 AS ()
+  Storage: Disk  Maximum Storage: 5274kB
+  Buffers: shared hit=2942, temp read=1317 written=660
+  ->  Seq Scan on o  (cost=0.00..5942.00 rows=300000 width=8) (actual time=0.009..16.736 rows=300000.00 loops=1)
+        Buffers: shared hit=2942
+Planning:
+  Buffers: shared hit=87
+Planning Time: 0.212 ms
+Execution Time: 74.726 ms

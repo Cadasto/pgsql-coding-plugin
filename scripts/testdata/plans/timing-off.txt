@@ -1,0 +1,15 @@
+Nested Loop  (cost=0.42..11571.00 rows=30213 width=12) (actual rows=29997.00 loops=1)
+  Buffers: shared hit=12264
+  ->  Seq Scan on c  (cost=0.00..417.00 rows=4000 width=8) (actual rows=4000.00 loops=1)
+        Filter: (region < 10)
+        Rows Removed by Filter: 16000
+        Buffers: shared hit=167
+  ->  Index Only Scan using o_cid_amt on o  (cost=0.42..2.71 rows=8 width=12) (actual rows=7.50 loops=4000)
+        Index Cond: (cid = c.id)
+        Heap Fetches: 0
+        Index Searches: 4000
+        Buffers: shared hit=12097
+Planning:
+  Buffers: shared hit=214 read=1
+Planning Time: 0.557 ms
+Execution Time: 7.331 ms

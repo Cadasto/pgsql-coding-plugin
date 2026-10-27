@@ -1,0 +1,12 @@
+Nested Loop  (cost=0.42..27573.00 rows=20000 width=12) (actual time=0.027..14.340 rows=750.00 loops=1)
+  Buffers: shared hit=60917
+  ->  Seq Scan on c  (cost=0.00..367.00 rows=20000 width=8) (actual time=0.006..0.973 rows=20000.00 loops=1)
+        Buffers: shared hit=167
+  ->  Index Scan using o_pkey on o  (cost=0.42..1.36 rows=1 width=12) (actual time=0.001..0.001 rows=0.04 loops=20000)
+        Index Cond: (id = (c.id * 400))
+        Index Searches: 20000
+        Buffers: shared hit=60750
+Planning:
+  Buffers: shared hit=195
+Planning Time: 0.371 ms
+Execution Time: 14.402 ms
