@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "bash hooks/session-start.sh"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "bash hooks/lint-on-save.sh"
+      },
+      {
+        "command": "bash hooks/skill-nudge.sh"
+      }
+    ]
+  }
+}
