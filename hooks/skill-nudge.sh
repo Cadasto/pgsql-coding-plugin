@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# PostToolUse / afterFileEdit hook: after a .sql, .go or .php file is edited, name ONE focused
-# pgsql-coding skill the edit calls for, printed as hookSpecificOutput.additionalContext (Claude
-# Code) or a plain line (Cursor). Once per skill per session. Always exits 0; never blocks an edit.
+# PostToolUse (Claude Code) / postToolUse on Write (Cursor) hook: after a .sql, .go or .php file
+# is edited, name ONE focused pgsql-coding skill the edit calls for, as context the model reads:
+# hookSpecificOutput.additionalContext (Claude Code) or additional_context (Cursor). Once per
+# skill per session. Always exits 0; never blocks an edit.
 #
 # Go and PHP files only nudge on unmistakable SQL (a jsonb operator, DDL, a pgx or PDO call), so
 # ordinary host-language edits stay silent; go-coding and php-coding own those.
@@ -9,7 +10,8 @@ set -u
 f="${CLAUDE_FILE_PATH:-}"; sid=""; payload=""
 if [ ! -t 0 ]; then
   payload="$(cat)"
-  [ -n "$f" ] || f="$(printf '%s' "$payload" | grep -oE '"file_?[Pp]ath"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
+  # Claude's tool_input.file_path; Cursor documents no Write input fields, so accept path too.
+  [ -n "$f" ] || f="$(printf '%s' "$payload" | grep -oE '"(file_?[Pp]ath|path)"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
   # Claude Code names the session session_id; Cursor names it conversation_id.
   sid="$(printf '%s' "$payload" | grep -oE '"(session|conversation)_id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
 fi
@@ -23,8 +25,8 @@ case "$f" in *.sql) kind=sql;; *.go) kind=go;; *.php) kind=php;; *) exit 0;; esa
 json_field() { printf '%s' "$payload" | grep -oE "\"$1\"[[:space:]]*:[[:space:]]*\"(\\\\.|[^\"\\\\])*\""; }
 
 # Match the text the edit ADDS, not old_string or the tool_response echo: Claude Code's Edit
-# new_string or Write content, or each new_string in Cursor afterFileEdit's edits. A payload with
-# neither (a manual run with a path only) matches the whole file.
+# new_string or Write content. A payload with neither (Cursor, whose Write input is undocumented,
+# or a manual run with a path only) matches the whole file.
 case "$payload" in
   *'"new_string"'*|*'"content"'*) subject="$(json_field new_string; json_field content)"; what="this edit";;
   *)                              subject="$(cat "$f")"; what="this file";;
@@ -67,12 +69,16 @@ marker="${TMPDIR:-/tmp}/pgsql-coding-nudge.${sid}.${skill}"
 # what/topic/skill are fixed literals set in this script (no quotes or backslashes), so the
 # message needs no JSON escaping. Escape first if any of them is ever built from external text.
 msg="› pgsql-coding: ${what} touches ${topic}; load pgsql-coding:${skill} before continuing."
-# Cursor sends hook_event_name too ("afterFileEdit"), so match the Claude Code event by value.
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -qE '"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'; then
+# Cursor first: it sends hook_event_name too, and every Cursor payload carries cursor_version.
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -q '"cursor_version"'; then
+  # Cursor postToolUse: additional_context is injected after the tool result
+  # (https://cursor.com/docs/agent/hooks).
+  printf '{"additional_context":"%s"}\n' "$msg"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -qE '"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'; then
   # Claude Code: additionalContext reaches the model; a top-level systemMessage reaches only the
   # user (https://code.claude.com/docs/en/hooks).
   printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$msg"
 else
-  printf '%s\n' "$msg"                           # Cursor afterFileEdit: plain line
+  printf '%s\n' "$msg"                           # a manual run: plain line
 fi
 exit 0

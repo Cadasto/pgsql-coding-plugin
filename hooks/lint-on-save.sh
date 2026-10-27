@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# PostToolUse / afterFileEdit hook (host-agnostic): lint the just-edited .sql file with squawk.
+# PostToolUse (Claude Code) / postToolUse on Write (Cursor) hook: lint the just-edited .sql file
+# with squawk.
 #
 # Opt-in by the project: runs only when a .squawk.toml exists in the file's directory or a parent
 # (the file /pgsql-lint-setup writes) and squawk is on PATH. Squawk's rules target migration
 # safety, so a project without that config would mostly see noise. Findings go back to the model
-# as hookSpecificOutput.additionalContext (Claude Code) or plain lines (Cursor). ALWAYS exits 0;
-# it reports and never blocks an edit.
+# as hookSpecificOutput.additionalContext (Claude Code) or additional_context (Cursor). ALWAYS
+# exits 0; it reports and never blocks an edit.
 #
 # File-path resolution, in order:
 #   1. $CLAUDE_FILE_PATH          — explicit override for tests and manual runs; no host sets it.
-#   2. tool payload JSON on stdin — Claude (`tool_input.file_path`) or Cursor `afterFileEdit`
-#      (`file_path`). Extracted without a jq/python dependency.
+#   2. tool payload JSON on stdin — Claude (`tool_input.file_path`) or Cursor (`file_path` or
+#      `path`; Cursor documents no Write input fields). Extracted without a jq/python dependency.
 set -u
 
 # Cheapest exit first: without squawk there is nothing to do, so do not even read the payload.
@@ -20,7 +21,7 @@ f="${CLAUDE_FILE_PATH:-}"; payload=""
 if [ ! -t 0 ]; then
   payload="$(cat)"
   [ -n "$f" ] || f="$(printf '%s' "$payload" \
-        | grep -oE '"file_?[Pp]ath"[[:space:]]*:[[:space:]]*"[^"]+"' \
+        | grep -oE '"(file_?[Pp]ath|path)"[[:space:]]*:[[:space:]]*"[^"]+"' \
         | head -n1 \
         | sed -E 's/.*"([^"]+)"$/\1/')"
 fi
@@ -48,16 +49,18 @@ out="$(printf '%s\n' "$out" | sed -e "s/${esc}\[[0-9;]*m//g" | grep -E ':[0-9]+:
 [ -n "$out" ] || exit 0
 
 msg="› pgsql-coding: squawk reports on $(basename "$f"); load pgsql-coding:pgsql-migrations and fix or justify each line:"
-# Cursor sends hook_event_name too ("afterFileEdit"), so match the Claude Code event by value.
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -qE '"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'; then
-  # Claude Code: build the JSON string by hand (no jq). Escape backslashes and quotes, turn tabs
-  # and newlines into escapes, and drop any other control character squawk might print.
-  body="$(printf '%s\n%s' "$msg" "$out" \
-    | tr -d '\000-\010\013-\037' \
-    | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' \
-    | awk 'NR > 1 { printf "\\n" } { printf "%s", $0 }')"
+# Build the JSON string by hand (no jq). Escape backslashes and quotes, turn tabs and newlines
+# into escapes, and drop any other control character squawk might print.
+body="$(printf '%s\n%s' "$msg" "$out" \
+  | tr -d '\000-\010\013-\037' \
+  | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' \
+  | awk 'NR > 1 { printf "\\n" } { printf "%s", $0 }')"
+# Cursor first: it sends hook_event_name too, and every Cursor payload carries cursor_version.
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -q '"cursor_version"'; then
+  printf '{"additional_context":"%s"}\n' "$body"  # Cursor postToolUse
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -qE '"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'; then
   printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$body"
 else
-  printf '%s\n%s\n' "$msg" "$out"                # Cursor afterFileEdit: plain lines
+  printf '%s\n%s\n' "$msg" "$out"                 # a manual run: plain lines
 fi
 exit 0

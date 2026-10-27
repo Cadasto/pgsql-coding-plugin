@@ -16,7 +16,7 @@ claude plugin validate .                    # manifest and component structure (
 `scripts/validate.py` checks:
 
 - **Manifests**: both parse, carry `name`, `version`, `description` and an `author` object, agree on `name`, `version`, `description`, `author`, `license`, `repository` and `keywords`, and every declared path exists.
-- **Hooks**: both configs exist and parse; every `hooks/*.sh` is wired for the equivalent event on both hosts (`SessionStart`/`sessionStart`, `PostToolUse`/`afterFileEdit`), exists, and is executable; Claude Code commands reach their script through `${CLAUDE_PLUGIN_ROOT}`, and Cursor commands never use it.
+- **Hooks**: both configs exist and parse; every `hooks/*.sh` is wired for the equivalent event on both hosts (`SessionStart`/`sessionStart`, `PostToolUse`/`postToolUse`), exists, and is executable; Claude Code commands reach their script through `${CLAUDE_PLUGIN_ROOT}`, Cursor commands never use it, and the Cursor config carries `"version": 1`.
 - **Frontmatter**: `name` equals the directory or filename, descriptions fit 1,024 characters (a folded `>-` or literal `|` block measured whole), no unquoted `: ` or ` #`, and agents declare `tools:`, never `allowed-tools:`.
 - **Progressive disclosure**: every `skills/*/references/*.md` is linked from its `SKILL.md` and every link resolves; references carry no frontmatter, open with `## Contents` past 100 lines, stay under 200 lines, and end with `## Sources`. A `SKILL.md` body stays under 1,500 words.
 - **Routing surface**: the router, `rules/pgsql-context.mdc`, the session-start banner and `pgsql-reviewer` each name every focused skill.
@@ -31,9 +31,9 @@ CI (`.github/workflows/validate.yml`) runs the validator, `--selftest`, the hook
 
 `scripts/hooks-test.sh` covers all three hooks with real host payload shapes:
 
-- `session-start`: detection by `go.mod` (pgx or lib/pq), `composer.json` (`ext-pdo_pgsql`), a compose file with a postgres image, or a `*.sql` file; silence elsewhere; the `/pgsql-lint-setup` hint only without a `.squawk.toml`; exit 0.
-- `skill-nudge`: one skill per edit, chosen from the text the edit adds (not the deleted text or the tool response echo) in Claude Code's payload and in Cursor's documented `afterFileEdit` payload (`conversation_id`, `edits[]`); once per skill per session; `additionalContext` JSON under Claude Code, a plain line under Cursor.
-- `lint-on-save`: a stub `squawk` on PATH proves the findings reach the model as valid JSON with colour codes stripped, that nothing runs without a `.squawk.toml` or without squawk, and that the hook always exits 0.
+- `session-start`: detection by `go.mod` (pgx or lib/pq), `composer.json` (`ext-pdo_pgsql`), a compose file with a postgres image, or a `*.sql` file; silence elsewhere; the `/pgsql-lint-setup` hint only without a `.squawk.toml`; exit 0; under Cursor, the workspace in `CURSOR_PROJECT_DIR` inspected rather than the plugin directory, and valid JSON `additional_context`.
+- `skill-nudge`: one skill per edit, chosen from the text the edit adds (not the deleted text or the tool response echo) in Claude Code's payload; the whole file under Cursor's `postToolUse` payload, whose `Write` input is undocumented; once per skill per session (`session_id` or `conversation_id`); `hookSpecificOutput.additionalContext` under Claude Code, `additional_context` under Cursor, both valid JSON.
+- `lint-on-save`: a stub `squawk` on PATH proves the findings reach the model as valid JSON on both hosts with colour codes stripped, that nothing runs without a `.squawk.toml` or without squawk, and that the hook always exits 0.
 
 ## Plan summariser tests
 
@@ -71,6 +71,6 @@ Load a working copy (see [install.md](install.md)), then, in a repository that u
 - **`/pgsql-lint-setup`**: writes `.squawk.toml` and does not overwrite an existing one unprompted.
 - **`skill-nudge` and `lint-on-save` hooks**: edit a `.sql` file that adds a jsonb predicate and confirm the `pgsql-jsonb` nudge; edit a migration with `CREATE INDEX` (no `CONCURRENTLY`) in a repository with a `.squawk.toml` and confirm the squawk finding arrives.
 - **Cursor rule**: open a `.sql` file and confirm `pgsql-context.mdc` attaches.
-- **Cursor hooks**: in a PostgreSQL workspace other than this repository, confirm the session-start line prints and an edit to a `.sql` file triggers the nudge. Cursor does not document how a plugin hook's relative command path resolves, so this is the only check that it works.
+- **Cursor hooks**: in a PostgreSQL workspace other than this repository, confirm the session-start line reaches the agent and an edit to a `.sql` file triggers the nudge. Cursor does not document the `Write` tool's input fields, so this is the only check that the hooks find the edited file there.
 
 After editing content, reinstall or restart the session.

@@ -1,16 +1,22 @@
 {
+  "version": 1,
   "hooks": {
     "sessionStart": [
       {
-        "command": "bash hooks/session-start.sh"
+        "command": "bash hooks/session-start.sh",
+        "timeout": 10
       }
     ],
-    "afterFileEdit": [
+    "postToolUse": [
       {
-        "command": "bash hooks/lint-on-save.sh"
+        "command": "bash hooks/lint-on-save.sh",
+        "matcher": "Write",
+        "timeout": 20
       },
       {
-        "command": "bash hooks/skill-nudge.sh"
+        "command": "bash hooks/skill-nudge.sh",
+        "matcher": "Write",
+        "timeout": 5
       }
     ]
   }

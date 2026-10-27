@@ -11,7 +11,7 @@ Checks:
   * hook-config JSON validity, and dual-host hook parity: both configs present, the same
     ``hooks/*.sh`` wired for the equivalent event on both hosts, each wired script present and
     executable, none unwired; Claude commands through ``${CLAUDE_PLUGIN_ROOT}``, Cursor commands
-    workspace-relative;
+    workspace-relative and Cursor's config at ``"version": 1``;
   * SKILL.md / agent / command frontmatter: required keys, ``name`` matching the directory or
     filename, descriptions within the Agent Skills limit (folded and literal blocks measured
     whole), no unquoted ``: `` or `` #``. Agents
@@ -74,7 +74,7 @@ CURSOR_RULE = "rules/pgsql-context.mdc"
 BANNER = "hooks/session-start.sh"
 # Hook events that mean the same thing on each host, so the same scripts must be wired for
 # both. Claude event -> Cursor event.
-EQUIVALENT_HOOK_EVENTS = {"SessionStart": "sessionStart", "PostToolUse": "afterFileEdit"}
+EQUIVALENT_HOOK_EVENTS = {"SessionStart": "sessionStart", "PostToolUse": "postToolUse"}
 # Docs that inventory the component surface, and which kinds each one claims to cover.
 INVENTORY_DOCS = {
     "README.md": ("skills", "agents", "hooks"),
@@ -368,6 +368,8 @@ def validate_hook_parity():
         for cmd in commands:
             if "hooks/" in cmd and "${CLAUDE_PLUGIN_ROOT}/hooks/" not in cmd:
                 err(f"hooks/hooks.json: {event} command '{cmd}' must reach its script through ${{CLAUDE_PLUGIN_ROOT}}")
+    if cursor.get("version") != 1:
+        err("hooks/cursor-hooks.json: needs \"version\": 1, which Cursor requires of a hooks file")
     for event, commands in _hook_commands(cursor).items():
         for cmd in commands:
             if "CLAUDE_PLUGIN_ROOT" in cmd:
@@ -689,7 +691,7 @@ def _selftest_fetch_policy() -> int:
 
 SELFTEST_HOOKS_CLAUDE = {"hooks": {"PostToolUse": [{"matcher": "Write|Edit", "hooks": [
     {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/a.sh"}]}]}}
-SELFTEST_HOOKS_CURSOR = {"hooks": {"afterFileEdit": [{"command": "bash hooks/a.sh"}]}}
+SELFTEST_HOOKS_CURSOR = {"version": 1, "hooks": {"postToolUse": [{"command": "bash hooks/a.sh", "matcher": "Write"}]}}
 
 
 def _selftest_tree(root: Path, *, break_it=None):
@@ -731,9 +733,11 @@ def _selftest_tree(root: Path, *, break_it=None):
     cursor = json.loads(json.dumps(SELFTEST_HOOKS_CURSOR))
     cursor["hooks"]["sessionStart"] = [{"command": f"bash {BANNER}"}]
     if break_it == "hook_parity":
-        cursor["hooks"]["afterFileEdit"] = []
+        cursor["hooks"]["postToolUse"] = []
     if break_it == "cursor_plugin_root":
-        cursor["hooks"]["afterFileEdit"] = [{"command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/a.sh"}]
+        cursor["hooks"]["postToolUse"] = [{"command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/a.sh", "matcher": "Write"}]
+    if break_it == "cursor_no_version":
+        del cursor["version"]
     if break_it == "claude_relative":
         claude["hooks"]["PostToolUse"][0]["hooks"][0]["command"] = "bash hooks/a.sh"
     (root / "hooks/hooks.json").write_text(json.dumps(claude))
@@ -760,6 +764,7 @@ SELFTEST_CASES = (
     ("one host's hook config is missing", "hook_config_missing", (validate_hook_parity,)),
     ("Cursor hook command uses CLAUDE_PLUGIN_ROOT", "cursor_plugin_root", (validate_hook_parity,)),
     ("Claude hook command is workspace-relative", "claude_relative", (validate_hook_parity,)),
+    ("Cursor hook config without version 1", "cursor_no_version", (validate_hook_parity,)),
     ("folded description over the limit", "description_folded", (validate_skills,)),
     ("shipped skill missing from the docs", "doc_inventory", (validate_doc_inventories,)),
     ("unquoted ': ' in a description", "frontmatter_colon", (validate_skills,)),
