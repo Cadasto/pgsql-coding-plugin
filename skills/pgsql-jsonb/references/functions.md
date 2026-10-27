@@ -37,7 +37,7 @@ Deterministic backstop: none. Run the expression in `psql` against PostgreSQL 18
 
 ## Building JSON and aggregating
 
-- **Aggregates return NULL over zero rows.** `jsonb_agg` and `JSON_ARRAYAGG` give SQL NULL, not `[]` ([aggregate functions](https://www.postgresql.org/docs/18/functions-aggregate.html)). Wrap them: `COALESCE(jsonb_agg(x ORDER BY x), '[]')`.
+- **Wrap `jsonb_agg` and `JSON_ARRAYAGG` for an empty input.** Over zero rows they give SQL NULL, not `[]`, as `pgsql-query` says of every aggregate but `count` ([aggregate functions](https://www.postgresql.org/docs/18/functions-aggregate.html)): `COALESCE(jsonb_agg(x ORDER BY x), '[]')`.
 - **Order is unspecified unless stated.** Put `ORDER BY` inside the aggregate call for `jsonb_agg` and `jsonb_object_agg` ([aggregate functions](https://www.postgresql.org/docs/18/functions-aggregate.html)); filter with `FILTER (WHERE ...)`.
 - **The NULL defaults differ by function** (checked on 18.6): `json_array(...)` and `JSON_ARRAYAGG` drop NULLs (ABSENT ON NULL); `json_object(...)` and `JSON_OBJECTAGG` keep them (NULL ON NULL); `jsonb_agg` keeps them. State `ABSENT ON NULL` or `NULL ON NULL`, or use `jsonb_agg_strict`, so the reader does not have to know.
 - **Duplicate keys.** `jsonb_object_agg` keeps the last value for a repeated key; `jsonb_object_agg_unique` raises an error; the `_strict` forms skip NULL values ([aggregate functions](https://www.postgresql.org/docs/18/functions-aggregate.html)).
