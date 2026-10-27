@@ -6,8 +6,8 @@ Backstop: `SHOW server_version;` on the project's database, or the image tag in 
 
 ## Rules
 
-- **The floor is PostgreSQL 18.** The skills write PG 18 forms flat. When a project runs 17 or older, check this list before suggesting a feature, and say which suggestion needs an upgrade. Older features (15 and before) carry their version inline in the skill that teaches them.
-- **PostgreSQL 19 is a hint, not a rule.** Release candidate 1 shipped on 2026-10-15 and there is no release date yet ([postgresql.org](https://www.postgresql.org/)). Use a 19 feature only when the project's server already runs 19, and label it.
+- **When a project runs 17 or older, check this list before suggesting a feature,** and say which suggestion needs an upgrade. Older features (15 and before) carry their version inline in the skill that teaches them.
+- **Label a PostgreSQL 19 feature.** Release candidate 1 shipped on 2026-10-15 and there is no release date yet ([postgresql.org](https://www.postgresql.org/)).
 - **Check incompatibilities on every major upgrade.** Each release notes page opens with a "Migration to Version N" section that lists behaviour changes. Read it before upgrading.
 
 ## Arrived in PostgreSQL 17

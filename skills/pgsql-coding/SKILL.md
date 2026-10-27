@@ -1,6 +1,6 @@
 ---
 name: pgsql-coding
-description: PostgreSQL coding-standards router for PostgreSQL 18 and later (19 additions flagged as hints). This skill should be used when a task writes, reviews, tunes or debugs SQL, a .sql file, a migration, a schema, or a query string in Go (pgx) or PHP (PDO) code, when the task spans several areas, or when the question is which tool or standard applies. It names the deterministic tool to run (EXPLAIN, squawk, plpgsql_check), then the focused skill that owns the topic (pgsql-query, pgsql-jsonb, pgsql-schema, pgsql-indexing, pgsql-performance, pgsql-migrations, pgsql-lint-setup). Loading the router alone does not apply the standards; load the skill it names next. For one already-identified topic, load that skill directly. Not for other databases (MySQL, SQLite, SQL Server) and not for Go or PHP style, which go-coding and php-coding own.
+description: PostgreSQL coding-standards router for PostgreSQL 18 and later (19 additions flagged as hints). This skill should be used when a task writes, reviews, tunes or debugs SQL, a .sql file, a migration, a schema, or a query string in Go (pgx) or PHP (PDO) code, when the task spans several areas, or when the question is which tool or standard applies, for example "review this SQL", "write a Postgres query for this" or "what should I check before this migration ships". It names the deterministic tool to run (EXPLAIN, squawk, plpgsql_check), then the focused skill that owns the topic (pgsql-query, pgsql-jsonb, pgsql-schema, pgsql-indexing, pgsql-performance, pgsql-migrations, pgsql-lint-setup). Loading the router alone does not apply the standards; load the skill it names next. For one already-identified topic, load that skill directly. Not for other databases (MySQL, SQLite, SQL Server) and not for Go or PHP style, which go-coding and php-coding own.
 ---
 
 # pgsql-coding: PostgreSQL standards router
@@ -77,4 +77,3 @@ Dispatch the `pgsql-reviewer` agent. It is report-only and context-isolated: it 
 
 Dispatch the `pgsql-plan-analyst` agent for an `EXPLAIN` plan over about 50 lines or two plans to compare, with the plan saved to a file. It runs `pgsql-performance`'s plan summariser in its own context and returns a ranked diagnosis, so the plan never fills this conversation.
 
-`/pgsql-lint-setup` writes the reference `.squawk.toml` into a repository.

@@ -2,7 +2,7 @@
 
 Read when: a task asks which indexes are unused, duplicated, redundant or invalid, looks for foreign keys without an index, suspects index bloat or a stuck GIN pending list, follows an OS, glibc or ICU upgrade, or wants to test an index before creating it.
 
-Backstop: the catalog queries below; each runs read-only on PostgreSQL 18 (run on 18.6, 2026-10-27). Building and rebuilding indexes on a live table, including `CONCURRENTLY` and partitioned tables, belongs to `pgsql-migrations`.
+Backstop: the catalog queries below; each runs read-only on PostgreSQL 18 (checked). Building and rebuilding indexes on a live table, including `CONCURRENTLY` and partitioned tables, belongs to `pgsql-migrations`.
 
 ## Contents
 
@@ -130,3 +130,4 @@ SELECT hypopg_reset();  -- hypopg_hide_index(oid) instead previews a plan withou
 - PostgreSQL wiki, Index Maintenance (query shapes): <https://wiki.postgresql.org/wiki/Index_Maintenance> (checked 2026-10-27)
 - PostgreSQL 19 release notes, as of 2026-10-09: <https://www.postgresql.org/docs/19/release-19.html> (checked 2026-10-27)
 - REPACK (19): <https://www.postgresql.org/docs/19/sql-repack.html> (checked 2026-10-27)
+- Behaviour marked "checked" was run on PostgreSQL 18.6 (2026-10-27).

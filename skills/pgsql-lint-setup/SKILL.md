@@ -1,6 +1,6 @@
 ---
 name: pgsql-lint-setup
-description: This skill should be used when the user runs /pgsql-lint-setup or asks to "set up squawk", "lint our Postgres migrations", "add a migration linter to CI", or "scaffold .squawk.toml", or asks how to set squawk's pg_version or assume_in_transaction, how to exclude or ignore a squawk rule, how to run squawk in GitHub Actions, or how to check PL/pgSQL functions with plpgsql_check. It writes the reference .squawk.toml (PostgreSQL 18, migration files assumed to run in a transaction) without overwriting an existing one, and reports the commands for local runs and CI. Not for what a squawk rule means or how to fix the migration (`pgsql-migrations`).
+description: This skill should be used when the user runs /pgsql-lint-setup or asks to "set up squawk", "add SQL linting", "lint our Postgres migrations", "add a migration linter to CI", "fail the build on unsafe migrations" or "scaffold .squawk.toml", or asks how to set squawk's pg_version or assume_in_transaction, how to exclude or ignore a squawk rule, how to run squawk in GitHub Actions, or how to check PL/pgSQL functions with plpgsql_check. It writes the reference .squawk.toml (PostgreSQL 18, migration files assumed to run in a transaction) without overwriting an existing one, and reports the commands for local runs and CI. Not for what a squawk rule means or how to fix the migration (`pgsql-migrations`).
 argument-hint: optional target directory (defaults to the repository root)
 allowed-tools:
   - Read
@@ -23,15 +23,14 @@ Deterministic backstop: `squawk` itself; this skill only configures it.
 ## Steps
 
 1. **Do not overwrite an existing config.** squawk walks up from the current directory to find `.squawk.toml` ([squawk CLI](https://squawkhq.com/docs/cli)), so check `$ROOT` and its parents. If one exists, show how it differs from the block below and ask before changing anything.
-2. **Find the migration files and the runner.** Glob `**/*.sql` under folders such as `migrations/` or `db/migrations/`. A `-- +goose Up` line marks goose ([goose annotations](https://pressly.github.io/goose/documentation/annotations/)); `{version}_{title}.up.sql` and `.down.sql` pairs mark golang-migrate ([golang-migrate MIGRATIONS.md](https://github.com/golang-migrate/migrate/blob/master/MIGRATIONS.md)). Both wrap a file in a transaction, so keep `assume_in_transaction = true`; set it to `false` only when the runner sends each statement on its own.
-3. **Write `$ROOT/.squawk.toml`** from the block below. Set `pg_version` to the major version of the server the migrations run on; `"18"` is the plugin's floor.
+2. **Find the migration files and the runner.** Glob `**/*.sql` under folders such as `migrations/` or `db/migrations/`. A `-- +goose Up` line marks goose ([goose annotations](https://pressly.github.io/goose/documentation/annotations/)); `{version}_{title}.up.sql` and `.down.sql` pairs mark golang-migrate ([golang-migrate MIGRATIONS.md](https://github.com/golang-migrate/migrate/blob/master/MIGRATIONS.md)). Both wrap a file in a transaction, so keep `assume_in_transaction = true` (the block's comment says when not to).
+3. **Write `$ROOT/.squawk.toml`** from the block below. Set `pg_version` as its comment says.
 4. **List goose files marked `-- +goose NO TRANSACTION` that lack `-- squawk-disable-assume-in-transaction`.** Report them; do not edit migration files in this command.
 5. **Run it once when `squawk` is on PATH:** `squawk 'migrations/*.sql'`, with the glob quoted. Report the count of findings; fixing them is `pgsql-migrations`.
 6. **Report the commands** under *Running squawk* and the plpgsql_check line.
 
 ## Config to write
 
-The same text as `references/squawk.toml`; keep the two identical.
 
 ```toml
 # .squawk.toml: reference config from the pgsql-coding plugin (/pgsql-lint-setup).
@@ -70,11 +69,11 @@ excluded_rules = []
 
 ## PL/pgSQL functions
 
-squawk's rules target how a migration locks and what it breaks ([squawk rules](https://squawkhq.com/docs/rules)), not what a function body does. **plpgsql_check** is a server extension that checks PL/pgSQL bodies against the catalog: unknown columns, wrong types, unused variables, a missing `RETURN`, and `EXECUTE` open to SQL injection ([plpgsql_check](https://github.com/okbob/plpgsql_check)). Install it in the development or CI database, then:
+squawk does not check function bodies. **plpgsql_check** is a server extension that checks PL/pgSQL bodies against the catalog: unknown columns, wrong types, unused variables, a missing `RETURN`, and, with `security_warnings => true`, `EXECUTE` open to SQL injection ([plpgsql_check](https://github.com/okbob/plpgsql_check)). Install it in the development or CI database, then:
 
 ```sql
 CREATE EXTENSION plpgsql_check;
-SELECT * FROM plpgsql_check_function('public.refresh_totals()');
+SELECT * FROM plpgsql_check_function('public.refresh_totals()', security_warnings => true);
 ```
 
 The README has queries that check every function and trigger function at once. The Postgres Language Server also lints migrations, with rules inspired by squawk; its CLI is `postgres-language-server check <file>` and its config `postgres-language-server.jsonc` ([getting started](https://pg-language-server.com/latest/getting_started/)). Keep squawk as the CI gate so the advice in `pgsql-migrations` matches the tool.

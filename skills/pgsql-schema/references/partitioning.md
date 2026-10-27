@@ -39,7 +39,7 @@ CREATE TABLE event_log_2026_11 PARTITION OF event_log
 
 - **Without a default partition, a row that fits no partition is an error.** Create future partitions ahead of time, from a scheduled job or a migration ([partitioning](https://www.postgresql.org/docs/18/ddl-partitioning.html)).
 - **A default partition makes later changes slower.** Attaching a partition scans the default partition under an `ACCESS EXCLUSIVE` lock unless a CHECK constraint rules the new range out, and `DETACH PARTITION ... CONCURRENTLY` is not allowed while a default partition exists ([ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html), [partitioning](https://www.postgresql.org/docs/18/ddl-partitioning.html)). Prefer no default partition on tables whose old partitions are detached.
-- **Detach with `CONCURRENTLY` on a live table.** It holds only `SHARE UPDATE EXCLUSIVE` on the parent, cannot run inside a transaction block, and `DETACH PARTITION ... FINALIZE` completes one that was interrupted ([ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html)). Running it in a migration is `pgsql-migrations`.
+- **Detach with `CONCURRENTLY` on a live table.** Its lock, transaction limits and `FINALIZE` are in `pgsql-migrations`.
 - **Adding an index to a live partitioned table** follows the recipe in `pgsql-migrations`; which index to build is `pgsql-indexing`.
 
 ### Statistics

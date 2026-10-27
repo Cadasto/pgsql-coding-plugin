@@ -42,7 +42,7 @@ LIMIT 10;
 ## Capture plans and slow statements in the log
 
 - **`auto_explain` logs the plans of slow statements.** Preload it with `session_preload_libraries` or `LOAD 'auto_explain'` (superuser), and set `auto_explain.log_min_duration`; its default `-1` logs nothing ([auto_explain](https://www.postgresql.org/docs/18/auto-explain.html)).
-- **`auto_explain.log_analyze` costs every statement.** Timing happens for all statements "whether or not they run long enough to actually get logged" with "an extremely negative impact on performance"; `log_timing = off` keeps row counts at lower cost, and `sample_rate` explains only a fraction of statements ([auto_explain](https://www.postgresql.org/docs/18/auto-explain.html)). `log_buffers` requires `log_analyze`; `log_nested_statements` adds statements run inside functions. A staging recipe:
+- **Cut `log_analyze`'s cost on staging.** `log_timing = off` keeps row counts at lower cost, and `sample_rate` explains only a fraction of statements ([auto_explain](https://www.postgresql.org/docs/18/auto-explain.html)). `log_buffers` requires `log_analyze`; `log_nested_statements` adds statements run inside functions. A staging recipe:
 
 ```ini
 session_preload_libraries = 'auto_explain'
@@ -74,12 +74,12 @@ WHERE cardinality(pg_blocking_pids(a.pid)) > 0;
 
 ## Timeouts
 
-Set these per role, per session or with `SET LOCAL`; for `statement_timeout`, `lock_timeout` and `transaction_timeout`, setting them in `postgresql.conf` "is not recommended because it would affect all sessions" ([Client Connection Defaults](https://www.postgresql.org/docs/18/runtime-config-client.html)). All default to `0`, disabled.
+All default to `0`, disabled ([Client Connection Defaults](https://www.postgresql.org/docs/18/runtime-config-client.html)); SKILL.md says where to set them.
 
 - **`statement_timeout`** aborts a statement that runs too long. With the extended protocol it starts when a Parse, Bind, Execute or Describe message arrives.
 - **`lock_timeout`** aborts a statement that waits too long for any single lock. It is pointless at or above `statement_timeout`.
 - **`transaction_timeout`** (PG 17) ends a session whose transaction runs too long.
-- **`idle_in_transaction_session_timeout`** ends a session idle inside a transaction. An open transaction holds its locks and "prevents vacuuming away recently-dead tuples", so it causes bloat.
+- **`idle_in_transaction_session_timeout`** ends a session idle inside a transaction. An open transaction holds its locks and "prevents vacuuming away recently-dead tuples", so it causes bloat; end such transactions before tuning autovacuum.
 - **`idle_session_timeout`** is risky behind a connection pool, which may not handle the closed connection.
 
 ## Dead rows, vacuum and bloat
@@ -87,11 +87,9 @@ Set these per role, per session or with `SET LOCAL`; for `statement_timeout`, `l
 - **`UPDATE` and `DELETE` leave dead row versions.** Plain `VACUUM` makes their space reusable but rarely returns it to the operating system; `VACUUM FULL` rewrites the table under an `ACCESS EXCLUSIVE` lock, so avoid it on a live table ([Routine Vacuuming](https://www.postgresql.org/docs/18/routine-vacuuming.html)). Schedule a table rewrite through `pgsql-migrations`.
 - **Know when autovacuum fires.** By default once dead rows exceed 50 plus 20 percent of the table, capped at 100,000,000; every threshold can be overridden per table with a storage parameter ([Routine Vacuuming](https://www.postgresql.org/docs/18/routine-vacuuming.html), [Vacuuming settings](https://www.postgresql.org/docs/18/runtime-config-vacuum.html)).
 - **Check dead rows and vacuum activity.** Compare `n_dead_tup` with `n_live_tup` and read `last_autovacuum` in `pg_stat_user_tables` ([Cumulative Statistics](https://www.postgresql.org/docs/18/monitoring-stats.html)). PostgreSQL 18 adds `total_vacuum_time`, `total_autovacuum_time`, `total_analyze_time` and `total_autoanalyze_time` ([release notes 18](https://www.postgresql.org/docs/18/release-18.html)). `log_autovacuum_min_duration` (default `10min`) logs slow autovacuum runs and skipped ones ([Error Reporting and Logging](https://www.postgresql.org/docs/18/runtime-config-logging.html)).
-- **Dead rows a long transaction can still see are not removed.** An open transaction "prevents vacuuming away recently-dead tuples that may be visible only to this transaction" ([Client Connection Defaults](https://www.postgresql.org/docs/18/runtime-config-client.html)). Fix the transaction (timeouts above) before tuning autovacuum.
 
 ## Connections
 
-- **Count `work_mem` per operation and per session.** Total memory "could be many times the value of `work_mem`" because one query runs several sorts and hashes and many sessions run at once ([Resource Consumption](https://www.postgresql.org/docs/18/runtime-config-resource.html)). Many active connections multiply it.
 - **Fewer active connections can mean more throughput.** The PostgreSQL wiki attributes the drop past a point to contention for disk, memory, locks and CPU, and recommends a connection pool ([Number Of Database Connections](https://wiki.postgresql.org/wiki/Number_Of_Database_Connections), last edited 2014). Size the pool from measurement; pool settings for pgx and PDO are in `pgsql-query`.
 
 ## Newer in PostgreSQL 19 (hints)
@@ -114,7 +112,6 @@ Release candidate only ([release notes 19](https://www.postgresql.org/docs/19/re
 - Client Connection Defaults, timeouts: <https://www.postgresql.org/docs/18/runtime-config-client.html> (checked 2026-10-27)
 - Routine Vacuuming: <https://www.postgresql.org/docs/18/routine-vacuuming.html> (checked 2026-10-27)
 - Vacuuming settings: <https://www.postgresql.org/docs/18/runtime-config-vacuum.html> (checked 2026-10-27)
-- Resource Consumption, `work_mem`: <https://www.postgresql.org/docs/18/runtime-config-resource.html> (checked 2026-10-27)
 - PostgreSQL 18 release notes: <https://www.postgresql.org/docs/18/release-18.html> (checked 2026-10-27)
 - PostgreSQL wiki, Number Of Database Connections: <https://wiki.postgresql.org/wiki/Number_Of_Database_Connections> (checked 2026-10-27)
 - PostgreSQL 19 release notes, as of 2026-10-09: <https://www.postgresql.org/docs/19/release-19.html> (checked 2026-10-27)

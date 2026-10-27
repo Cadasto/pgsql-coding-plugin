@@ -19,7 +19,7 @@ Backstop: none for design. Squawk checks how a constraint is added to a live tab
 
 ### NOT NULL and CHECK
 
-- **NOT NULL by default.** "In most database designs the majority of columns should be marked not null", and a NOT NULL constraint is cheaper than `CHECK (col IS NOT NULL)` ([constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)). PostgreSQL 18 stores NOT NULL in `pg_constraint`, so it can be named ([release notes](https://www.postgresql.org/docs/18/release-18.html)).
+- **NOT NULL is cheaper than `CHECK (col IS NOT NULL)`** ([constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)). PostgreSQL 18 stores NOT NULL in `pg_constraint`, so it can be named ([release notes](https://www.postgresql.org/docs/18/release-18.html)).
 - **A CHECK sees only the row being written.** It must not read other rows or tables, and its functions must be immutable. A CHECK that breaks this "may appear to work in simple tests" yet lets the data drift and can make a dump fail to restore ([constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)).
 - **Changing a function a CHECK calls means dropping and re-adding the CHECK.** PostgreSQL does not recheck existing rows when the function changes ([constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)).
 
@@ -46,7 +46,6 @@ CREATE TABLE product (
 FOREIGN KEY (tenant_id, author_id) REFERENCES app_user ON DELETE SET NULL (author_id)
 ```
 
-- **The referencing columns need an index PostgreSQL does not create** ([constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)); `pgsql-indexing` owns it.
 - **Keys and their references share a collation story.** PostgreSQL 18 requires primary and foreign key columns to use deterministic collations or the same nondeterministic one; a restore fails otherwise ([release notes](https://www.postgresql.org/docs/18/release-18.html)).
 
 ### DEFERRABLE
