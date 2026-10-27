@@ -28,7 +28,7 @@ Route the PostgreSQL task to the skill and the tool that own it. This skill is a
 Before writing or reviewing SQL, load the focused skill that matches the change. Do not work from memory of it.
 
 - **Claude Code.** Invoke the Skill tool with `pgsql-coding:pgsql-jsonb`, and the same `pgsql-coding:` prefix for every skill in the table.
-- **Cursor.** Open `/pgsql-jsonb` (the same `/` prefix for every skill in the table). Its files are in the plugin install, next to this skill: read `../pgsql-jsonb/SKILL.md` from this file's directory. There is no Skill tool, and `pgsql-coding:pgsql-jsonb` is not a path.
+- **Cursor.** There is no Skill tool, and `pgsql-coding:pgsql-jsonb` is not a path. Read `../pgsql-jsonb/SKILL.md` from this file's directory, the same pattern for every skill in the table; the session-start line prints the install path, and `/pgsql-jsonb` opens the skill in chat.
 
 | The change touches | Load |
 |---|---|
@@ -41,7 +41,7 @@ Before writing or reviewing SQL, load the focused skill that matches the change.
 
 One load per skill per session is enough. A change usually needs two skills: a new jsonb query needs `pgsql-jsonb` and `pgsql-query`; a new index in a migration needs `pgsql-indexing` and `pgsql-migrations`. SQL inside Go or PHP code also needs that language's plugin (`go-coding`, `php-coding`) for the host code.
 
-Subagents do not inherit loaded skills. An orchestrator that dispatches implementers or reviewers puts this table in every brief, with the database the subagent may query, if any. On Claude Code the brief names `pgsql-coding:pgsql-query`. On Cursor it names `/pgsql-query` and tells the subagent to read that skill's `SKILL.md` from the plugin install.
+Subagents do not inherit loaded skills. An orchestrator that dispatches implementers or reviewers puts this table in every brief, with the database the subagent may query, if any. On Claude Code the brief names `pgsql-coding:pgsql-query`. On Cursor it gives the absolute path of each skill's `SKILL.md` in the plugin install, which a subagent cannot find on its own.
 
 ## Running SQL against a database
 
