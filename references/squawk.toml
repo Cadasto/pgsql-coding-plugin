@@ -1,0 +1,17 @@
+# .squawk.toml: reference config from the pgsql-coding plugin (/pgsql-lint-setup).
+# Rules: https://squawkhq.com/docs/rules  Keys: https://squawkhq.com/docs/cli
+
+# Lint as PostgreSQL 18, the plugin's floor; set the major version the
+# migrations run on. Version-gated rules follow it: prefer-repack fires from 19.
+pg_version = "18"
+
+# goose runs each migration file in one transaction, and golang-migrate sends a
+# file as one Exec, which PostgreSQL runs as one implicit transaction. Set false
+# when the runner sends each statement on its own. A file that runs outside a
+# transaction (goose "-- +goose NO TRANSACTION") carries the comment
+# "-- squawk-disable-assume-in-transaction".
+assume_in_transaction = true
+
+# No rule is excluded: each default rule backs a pgsql-migrations or pgsql-schema
+# rule. Ignore one finding in place with "-- squawk-ignore <rule-id>" instead.
+excluded_rules = []
