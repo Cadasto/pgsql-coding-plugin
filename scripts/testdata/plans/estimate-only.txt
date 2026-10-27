@@ -1,0 +1,10 @@
+Gather Merge  (cost=10322.20..10331.40 rows=79 width=30)
+  Workers Planned: 2
+  ->  Sort  (cost=9322.17..9322.26 rows=33 width=30)
+        Sort Key: o.total DESC, o.id
+        ->  Nested Loop  (cost=0.29..9321.34 rows=33 width=30)
+              ->  Parallel Seq Scan on orders o  (cost=0.00..8298.00 rows=833 width=28)
+                    Filter: ((doc ->> 'channel'::text) = 'web'::text)
+              ->  Index Scan using customers_pkey on customers c  (cost=0.29..1.23 rows=1 width=18)
+                    Index Cond: (id = o.customer_id)
+                    Filter: ((country = 'NL'::text) AND (city = 'NL-city-0'::text))

@@ -1,0 +1,26 @@
+Limit  (cost=0.42..117960.37 rows=3000 width=16) (actual time=13.701..61.486 rows=3000.00 loops=1)
+  Buffers: shared hit=36594 read=181
+  ->  Index Scan using orders_pkey on orders o  (cost=0.42..220782.12 rows=5615 width=16) (actual time=0.165..47.696 rows=3000.00 loops=1)
+        Filter: ((status = 'new'::text) AND (created_at > (now() - '20 days'::interval)))
+        Rows Removed by Filter: 216000
+        Index Searches: 1
+        Buffers: shared hit=36594 read=181
+        SubPlan 1
+          ->  Aggregate  (cost=35.71..35.72 rows=1 width=8) (actual time=0.008..0.008 rows=1.00 loops=3000)
+                Buffers: shared hit=32819 read=181
+                ->  Bitmap Heap Scan on orders o2  (cost=4.48..35.69 rows=8 width=0) (actual time=0.003..0.007 rows=8.00 loops=3000)
+                      Recheck Cond: (customer_id = o.customer_id)
+                      Heap Blocks: exact=24000
+                      Buffers: shared hit=32819 read=181
+                      ->  Bitmap Index Scan on orders_customer_id_idx  (cost=0.00..4.48 rows=8 width=0) (actual time=0.002..0.002 rows=8.00 loops=3000)
+                            Index Cond: (customer_id = o.customer_id)
+                            Index Searches: 3000
+                            Buffers: shared hit=8819 read=181
+Planning:
+  Buffers: shared hit=106 read=1
+Planning Time: 0.316 ms
+JIT:
+  Functions: 11
+  Options: Inlining false, Optimization false, Expressions true, Deforming true
+  Timing: Generation 0.709 ms (Deform 0.170 ms), Inlining 0.000 ms, Optimization 1.619 ms, Emission 11.919 ms, Total 14.247 ms
+Execution Time: 114.552 ms

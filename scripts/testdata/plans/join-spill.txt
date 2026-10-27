@@ -1,0 +1,26 @@
+Gather Merge  (cost=10322.20..10331.40 rows=79 width=30) (actual time=69.784..78.097 rows=26667.00 loops=1)
+  Workers Planned: 2
+  Workers Launched: 2
+  Buffers: shared hit=405829, temp read=301 written=332
+  ->  Sort  (cost=9322.17..9322.26 rows=33 width=30) (actual time=67.852..68.766 rows=8889.00 loops=3)
+        Sort Key: o.total DESC, o.id
+        Sort Method: external merge  Disk: 416kB
+        Buffers: shared hit=405829, temp read=301 written=332
+        Worker 0:  Sort Method: external merge  Disk: 408kB
+        Worker 1:  Sort Method: external merge  Disk: 400kB
+        ->  Nested Loop  (cost=0.29..9321.34 rows=33 width=30) (actual time=0.028..62.707 rows=8889.00 loops=3)
+              Buffers: shared hit=405799
+              ->  Parallel Seq Scan on orders o  (cost=0.00..8298.00 rows=833 width=28) (actual time=0.013..19.972 rows=44444.33 loops=3)
+                    Filter: ((doc ->> 'channel'::text) = 'web'::text)
+                    Rows Removed by Filter: 88889
+                    Buffers: shared hit=5798
+              ->  Index Scan using customers_pkey on customers c  (cost=0.29..1.23 rows=1 width=18) (actual time=0.001..0.001 rows=0.20 loops=133333)
+                    Index Cond: (id = o.customer_id)
+                    Filter: ((country = 'NL'::text) AND (city = 'NL-city-0'::text))
+                    Rows Removed by Filter: 1
+                    Index Searches: 133333
+                    Buffers: shared hit=400001
+Planning:
+  Buffers: shared hit=142 read=2
+Planning Time: 0.438 ms
+Execution Time: 78.938 ms
