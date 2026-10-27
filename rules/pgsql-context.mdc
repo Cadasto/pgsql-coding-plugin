@@ -48,7 +48,7 @@ Use `psql` only against a database the user names, never production without expl
 - Use `timestamptz`, `text`, `bigint GENERATED ALWAYS AS IDENTITY` or `uuidv7()`, and `numeric` for money. Index the referencing columns of a foreign key.
 - For jsonb, index the predicate shape the query uses: `@>` with a GIN index, `->>` with an expression index. Promote a key that every row has and every query filters on to a real column.
 - Propose no index or rewrite without a plan: `EXPLAIN (ANALYZE, BUFFERS)` before and after.
-- In migrations, set `lock_timeout`, build indexes `CONCURRENTLY`, add constraints `NOT VALID` and validate them separately, and run `squawk`.
+- In migrations, set `lock_timeout` before DDL that takes a strong lock, build indexes `CONCURRENTLY` (without a short `lock_timeout`, which would abort the build), add constraints `NOT VALID` and validate them separately, and run `squawk`.
 
 ## Writing for the human
 

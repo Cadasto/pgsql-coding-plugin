@@ -14,14 +14,14 @@ Backstop: squawk with `assume_in_transaction = true`, as in the reference `.squa
 ### goose
 
 - **Each file runs in one transaction by default.** "All statements within a single migration file are run within the same transaction" ([goose annotations](https://pressly.github.io/goose/documentation/annotations/)).
-- **`-- +goose NO TRANSACTION` runs the whole file outside a transaction,** its up and down parts both; place it at the top (same page). Keep such a file to the index statements and their `SET` lines. The `DROP` removes the `INVALID` index a failed earlier run left; without it, `IF NOT EXISTS` would keep that index ([CREATE INDEX](https://www.postgresql.org/docs/18/sql-createindex.html)). It drops a valid index of that name too, so give the index a name no other migration uses:
+- **`-- +goose NO TRANSACTION` runs the whole file outside a transaction,** its up and down parts both; place it at the top (same page). Keep such a file to the index statements and their `SET` lines. The `DROP` removes the `INVALID` index a failed earlier run left; without it, `IF NOT EXISTS` would keep that index ([CREATE INDEX](https://www.postgresql.org/docs/18/sql-createindex.html)). It drops a valid index of that name too, so give the index a name no other migration uses. Both timeouts are switched off for this file, for the reasons in `lock-levels.md` (a short `lock_timeout` aborts the build and leaves an `INVALID` index). squawk `require-lock-timeout` fires on concurrent statements too (v2.70.0 source); `SET lock_timeout = 0` satisfies it and clears a value an earlier file left on the connection:
 
 ```sql
 -- +goose NO TRANSACTION
 -- +goose Up
 -- squawk-disable-assume-in-transaction
-SET lock_timeout = '1s';
-SET statement_timeout = '30min';
+SET lock_timeout = 0;
+SET statement_timeout = 0;
 DROP INDEX CONCURRENTLY IF EXISTS orders_tenant_id_idx;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS orders_tenant_id_idx ON orders (tenant_id);
 
@@ -35,7 +35,7 @@ DROP INDEX CONCURRENTLY IF EXISTS orders_tenant_id_idx;
 
 - **A file is sent as one `Exec`.** "In PostgreSQL running multiple SQL statements in one `Exec` executes them inside a transaction" ([golang-migrate postgres](https://github.com/golang-migrate/migrate/blob/master/database/postgres/README.md)).
 - **Enable `x-multi-statement=true` in the database URL for a file with a concurrent statement** (same page). The file can then hold the `SET` lines and the drop-then-build pair from the goose example, with `-- squawk-disable-assume-in-transaction`.
-- **Without it, the concurrent statement needs a file of its own** (same page). That file has no room for `SET lock_timeout`; set the timeout on the migration role or in the connection options instead ([squawk](https://squawkhq.com/docs/safe_migrations)). It cannot drop a failed build's leftover either: before rerunning it, find the `INVALID` index and drop it by hand (`patterns.md`).
+- **Without it, the concurrent statement needs a file of its own** (same page). That file cannot switch the timeouts off, so it runs with any `lock_timeout` set on the migration role or in the connection options, which aborts the build on a busy system; prefer `x-multi-statement`. It cannot drop a failed build's leftover either: before rerunning it, find the `INVALID` index and drop it by hand (`patterns.md`).
 
 - **`x-statement-timeout` in the URL sets a statement timeout for the migration statements** (same page).
 
