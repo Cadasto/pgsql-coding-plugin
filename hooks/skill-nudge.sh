@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# PostToolUse (Claude Code) / postToolUse on Write or StrReplace (Cursor) hook: after a .sql, .go or .php file
-# is edited, name ONE focused pgsql-coding skill the edit calls for, as context the model reads:
-# hookSpecificOutput.additionalContext (Claude Code) or additional_context (Cursor). Once per
-# skill per session. Always exits 0; never blocks an edit.
+# PostToolUse (Claude Code) / postToolUse on Write or StrReplace (Cursor) hook: after a .sql, .go
+# or .php file is edited, name ONE focused pgsql-coding skill the edit calls for, as context the
+# model reads: hookSpecificOutput.additionalContext (Claude Code) or additional_context (Cursor).
+# Once per skill per session. Always exits 0; never blocks an edit.
 #
 # Go and PHP files only nudge on unmistakable SQL (a jsonb operator, DDL, a pgx or PDO call), so
 # ordinary host-language edits stay silent; go-coding and php-coding own those.
@@ -10,7 +10,8 @@ set -u
 f="${CLAUDE_FILE_PATH:-}"; sid=""; payload=""
 if [ ! -t 0 ]; then
   payload="$(cat)"
-  # Claude's tool_input.file_path; Cursor documents no Write input fields, so accept path too.
+  # Claude's tool_input.file_path; Cursor's StrReplace sends path and its Write fields are
+  # undocumented, so accept both.
   [ -n "$f" ] || f="$(printf '%s' "$payload" | grep -oE '"(file_?[Pp]ath|path)"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
   # Claude Code names the session session_id; Cursor names it conversation_id.
   sid="$(printf '%s' "$payload" | grep -oE '"(session|conversation)_id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
@@ -44,6 +45,9 @@ case "$payload" in
   *'"new_string"'*|*'"content"'*) subject="$(json_field new_string; json_field content)"; what="this edit";;
   *)                              subject="$(cat "$f")"; what="this file";;
 esac
+# The added text is still JSON-escaped: a line break is \n, a tab \t. Turn those into spaces so
+# a keyword at the start of a later line keeps its word edge.
+subject="$(printf '%s' "$subject" | sed -e 's/\\[nrt]/ /g')"
 # -e: some patterns start with "-", which grep would otherwise read as an option. No \b: BSD
 # grep lacks it, so word edges are spelled out.
 has() { printf '%s' "$subject" | grep -qiE -e "$1"; }
@@ -78,11 +82,13 @@ fi
 [ -n "$skill" ] || exit 0
 marker="${TMPDIR:-/tmp}/pgsql-coding-nudge.${sid}.${skill}"
 [ -e "$marker" ] && exit 0
-: > "$marker" 2>/dev/null || true
-# what/topic/skill are fixed literals set in this script (no quotes or backslashes), so the
-# message needs no JSON escaping. Escape first if any of them is ever built from external text.
+# what/topic/skill are fixed literals set in this script (no quotes or backslashes). The Cursor
+# plugin path comes from outside, so it is JSON-escaped before it joins the message.
 if [ "$cursor" -eq 1 ]; then
-  how="read /${skill}"
+  # Cursor has no Skill tool; name the skill's file in the plugin install, which holds hooks/.
+  root="${CURSOR_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+  root="$(printf '%s' "${root%/}" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+  how="read the ${skill} skill, ${root}/skills/${skill}/SKILL.md,"
 else
   how="load pgsql-coding:${skill}"
 fi
@@ -91,12 +97,14 @@ msg="› pgsql-coding: ${what} touches ${topic}; ${how} before continuing."
 if [ "$cursor" -eq 1 ]; then
   # Cursor postToolUse: additional_context is injected after the tool result
   # (https://cursor.com/docs/agent/hooks).
-  printf '{"additional_context":"%s"}\n' "$msg"
+  out="$(printf '{"additional_context":"%s"}' "$msg")"
 elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -qE '"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'; then
   # Claude Code: additionalContext reaches the model; a top-level systemMessage reaches only the
   # user (https://code.claude.com/docs/en/hooks).
-  printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$msg"
+  out="$(printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}' "$msg")"
 else
-  printf '%s\n' "$msg"                           # a manual run: plain line
+  out="$msg"                                       # a manual run: plain line
 fi
+# Mark the skill as nudged only once the message is out, so a failed write does not use it up.
+printf '%s\n' "$out" && { : > "$marker"; } 2>/dev/null
 exit 0

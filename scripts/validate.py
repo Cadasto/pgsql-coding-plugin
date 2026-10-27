@@ -11,7 +11,8 @@ Checks:
   * hook-config JSON validity, and dual-host hook parity: both configs present, the same
     ``hooks/*.sh`` wired for the equivalent event on both hosts, each wired script present and
     executable, none unwired; Claude commands through ``${CLAUDE_PLUGIN_ROOT}``, Cursor commands
-    relative to the plugin install and Cursor's config at ``"version": 1``;
+    never through it and Cursor's config at ``"version": 1``; every edit hook's matcher names
+    each host's edit tools (Claude ``Write|Edit``, Cursor ``Write|StrReplace``);
   * SKILL.md / agent / command frontmatter: required keys, ``name`` matching the directory or
     filename, descriptions within the Agent Skills limit (folded and literal blocks measured
     whole), no unquoted ``: `` or `` #``. Agents
@@ -75,6 +76,8 @@ BANNER = "hooks/session-start.sh"
 # Hook events that mean the same thing on each host, so the same scripts must be wired for
 # both. Claude event -> Cursor event.
 EQUIVALENT_HOOK_EVENTS = {"SessionStart": "sessionStart", "PostToolUse": "postToolUse"}
+# The tools each host edits files with; an edit hook's matcher must name all of them.
+EDIT_TOOLS = {"PostToolUse": {"Write", "Edit"}, "postToolUse": {"Write", "StrReplace"}}
 # Docs that inventory the component surface, and which kinds each one claims to cover.
 INVENTORY_DOCS = {
     "README.md": ("skills", "agents", "hooks"),
@@ -375,6 +378,14 @@ def validate_hook_parity():
             if "CLAUDE_PLUGIN_ROOT" in cmd:
                 err(f"hooks/cursor-hooks.json: {event} command '{cmd}' uses CLAUDE_PLUGIN_ROOT, which Cursor "
                     f"does not set; keep the path relative to the plugin install")
+    for name, config in (("hooks.json", claude), ("cursor-hooks.json", cursor)):
+        for event, tools in EDIT_TOOLS.items():
+            for entry in (config.get("hooks") or {}).get(event) or []:
+                matcher = str(entry.get("matcher") or "") if isinstance(entry, dict) else ""
+                missing = set() if matcher in ("", "*") else tools - set(matcher.split("|"))
+                if missing:
+                    err(f"hooks/{name}: {event} matcher '{matcher}' misses {', '.join(sorted(missing))}, "
+                        f"so an edit with that tool runs no hook")
     claude_events, cursor_events = _hook_scripts(claude), _hook_scripts(cursor)
     wired = set()
     for claude_event, cursor_event in EQUIVALENT_HOOK_EVENTS.items():
@@ -691,7 +702,7 @@ def _selftest_fetch_policy() -> int:
 
 SELFTEST_HOOKS_CLAUDE = {"hooks": {"PostToolUse": [{"matcher": "Write|Edit", "hooks": [
     {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/a.sh"}]}]}}
-SELFTEST_HOOKS_CURSOR = {"version": 1, "hooks": {"postToolUse": [{"command": "bash hooks/a.sh", "matcher": "Write"}]}}
+SELFTEST_HOOKS_CURSOR = {"version": 1, "hooks": {"postToolUse": [{"command": "bash hooks/a.sh", "matcher": "Write|StrReplace"}]}}
 
 
 def _selftest_tree(root: Path, *, break_it=None):
@@ -735,7 +746,9 @@ def _selftest_tree(root: Path, *, break_it=None):
     if break_it == "hook_parity":
         cursor["hooks"]["postToolUse"] = []
     if break_it == "cursor_plugin_root":
-        cursor["hooks"]["postToolUse"] = [{"command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/a.sh", "matcher": "Write"}]
+        cursor["hooks"]["postToolUse"] = [{"command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/a.sh", "matcher": "Write|StrReplace"}]
+    if break_it == "cursor_edit_matcher":
+        cursor["hooks"]["postToolUse"][0]["matcher"] = "Write"
     if break_it == "cursor_no_version":
         del cursor["version"]
     if break_it == "claude_relative":
@@ -765,6 +778,7 @@ SELFTEST_CASES = (
     ("Cursor hook command uses CLAUDE_PLUGIN_ROOT", "cursor_plugin_root", (validate_hook_parity,)),
     ("Claude hook command is workspace-relative", "claude_relative", (validate_hook_parity,)),
     ("Cursor hook config without version 1", "cursor_no_version", (validate_hook_parity,)),
+    ("Cursor edit hook misses StrReplace", "cursor_edit_matcher", (validate_hook_parity,)),
     ("folded description over the limit", "description_folded", (validate_skills,)),
     ("shipped skill missing from the docs", "doc_inventory", (validate_doc_inventories,)),
     ("unquoted ': ' in a description", "frontmatter_colon", (validate_skills,)),

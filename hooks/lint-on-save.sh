@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# PostToolUse (Claude Code) / postToolUse on Write or StrReplace (Cursor) hook: lint the just-edited .sql file
-# with squawk.
+# PostToolUse (Claude Code) / postToolUse on Write or StrReplace (Cursor) hook: lint the
+# just-edited .sql file with squawk.
 #
 # Opt-in by the project: runs only when a .squawk.toml exists in the file's directory or a parent
 # (the file /pgsql-lint-setup writes) and squawk is on PATH. Squawk's rules target migration
@@ -10,8 +10,9 @@
 #
 # File-path resolution, in order:
 #   1. $CLAUDE_FILE_PATH          — explicit override for tests and manual runs; no host sets it.
-#   2. tool payload JSON on stdin — Claude (`tool_input.file_path`) or Cursor (`file_path` or
-#      `path`; Cursor documents no Write input fields). Extracted without a jq/python dependency.
+#   2. tool payload JSON on stdin — Claude (`tool_input.file_path`) or Cursor (`path` from
+#      StrReplace, or `file_path`; Cursor documents no Write input fields). Extracted without a
+#      jq/python dependency. Under Cursor a relative path is joined to CURSOR_PROJECT_DIR.
 set -u
 
 # Cheapest exit first: without squawk there is nothing to do, so do not even read the payload.
@@ -61,7 +62,10 @@ out="$(printf '%s\n' "$out" | sed -e "s/${esc}\[[0-9;]*m//g" | grep -E ':[0-9]+:
 [ -n "$out" ] || exit 0
 
 if [ "$cursor" -eq 1 ]; then
-  how="read /pgsql-migrations"
+  # Cursor has no Skill tool; name the skill's file in the plugin install, which holds hooks/.
+  # The whole message is JSON-escaped below, so the path needs no escaping here.
+  root="${CURSOR_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+  how="read the pgsql-migrations skill, ${root%/}/skills/pgsql-migrations/SKILL.md,"
 else
   how="load pgsql-coding:pgsql-migrations"
 fi
