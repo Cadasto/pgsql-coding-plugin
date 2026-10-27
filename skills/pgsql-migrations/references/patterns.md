@@ -74,7 +74,7 @@ ALTER TABLE orders ADD CONSTRAINT orders_external_ref_key UNIQUE USING INDEX ord
 
 ### Create, drop or rebuild an index
 
-- **Create and drop with `CONCURRENTLY`, in a file that runs outside a transaction with `lock_timeout` set to 0** (`migration-tools.md`, `lock-levels.md`); a short `lock_timeout` aborts the build on a busy system. squawk: `require-concurrent-index-creation`, `require-concurrent-index-deletion`.
+- **Create and drop with `CONCURRENTLY`, in a file that runs outside a transaction and sets `lock_timeout` and `statement_timeout` to 0** (`migration-tools.md`, `lock-levels.md`); a short `lock_timeout` aborts the build on a busy system. squawk: `require-concurrent-index-creation`, `require-concurrent-index-deletion`.
 - **After a failed build, drop the `INVALID` index before rerunning.** `IF NOT EXISTS` checks only the name, so it keeps the invalid leftover ([CREATE INDEX](https://www.postgresql.org/docs/18/sql-createindex.html)). `pg_index.indisvalid` is false for a possibly incomplete index ([`pg_index`](https://www.postgresql.org/docs/18/catalog-pg-index.html)):
 
 ```sql
