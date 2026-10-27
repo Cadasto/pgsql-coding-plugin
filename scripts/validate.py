@@ -8,10 +8,13 @@ Checks:
   * dual-host parity (name/version/description/author/license/repository/keywords agree);
   * every component path declared in a manifest exists inside the plugin dir;
   * kebab-case directory/file names for skills, references, agents, commands, and rules;
-  * hook-config JSON validity, and dual-host hook parity: the same ``hooks/*.sh`` wired for the
-    equivalent event on both hosts, each wired script present and executable, none unwired;
+  * hook-config JSON validity, and dual-host hook parity: both configs present, the same
+    ``hooks/*.sh`` wired for the equivalent event on both hosts, each wired script present and
+    executable, none unwired; Claude commands through ``${CLAUDE_PLUGIN_ROOT}``, Cursor commands
+    workspace-relative;
   * SKILL.md / agent / command frontmatter: required keys, ``name`` matching the directory or
-    filename, descriptions within the Agent Skills limit, no unquoted ``: `` or `` #``. Agents
+    filename, descriptions within the Agent Skills limit (folded and literal blocks measured
+    whole), no unquoted ``: `` or `` #``. Agents
     MUST declare ``tools:`` (never ``allowed-tools:``, which Claude Code silently ignores so the
     agent inherits *all* tools);
   * skill references (progressive disclosure): every ``references/*.md`` linked one level deep
@@ -112,6 +115,29 @@ def frontmatter(text: str):
     return m.group(1) if m else None
 
 
+def frontmatter_value(front: str, field: str):
+    """A top-level frontmatter field's value as YAML reads it: a folded (`>`, `>-`) or literal
+    (`|`) block, or a plain scalar continued on indented lines, joined into one string, quotes
+    removed. None when the field is absent. Enough to measure a description, not a YAML parser."""
+    lines = front.splitlines()
+    for i, line in enumerate(lines):
+        m = re.match(rf"^{field}:[ \t]*(.*)$", line)
+        if not m:
+            continue
+        head, cont = m.group(1).strip(), []
+        for nxt in lines[i + 1:]:
+            if nxt.strip() and not nxt[:1].isspace():
+                break
+            cont.append(nxt.strip())
+        if head[:1] == "|":
+            return "\n".join(cont).strip()
+        value = " ".join(c for c in ([] if head[:1] == ">" else [head]) + cont if c)
+        if len(value) > 1 and value[0] in "\"'" and value[-1] == value[0]:
+            value = value[1:-1]
+        return value
+    return None
+
+
 def check_frontmatter_scalars(front: str, rel: str):
     """Stdlib-only guard for the most common frontmatter YAML breakage: an unquoted scalar
     value containing a ': ' (colon-space) or ' #', which a real YAML parser reads as a nested
@@ -162,10 +188,9 @@ def validate_skills():
         fm_name = re.search(r"^name:\s*(\S+)", front, re.MULTILINE)
         if fm_name and fm_name.group(1) != skill_dir.name:
             err(f"{rel}: frontmatter name '{fm_name.group(1)}' != directory '{skill_dir.name}'")
-        fm_desc = re.search(r"^description:\s*(.+)$", front, re.MULTILINE)
-        if fm_desc and len(fm_desc.group(1)) > DESCRIPTION_MAX:
-            err(f"{rel}: description is {len(fm_desc.group(1))} characters; "
-                f"the Agent Skills limit is {DESCRIPTION_MAX}")
+        fm_desc = frontmatter_value(front, "description")
+        if fm_desc and len(fm_desc) > DESCRIPTION_MAX:
+            err(f"{rel}: description is {len(fm_desc)} characters; the Agent Skills limit is {DESCRIPTION_MAX}")
         body = text[re.match(r"\A---\n.*?\n---\n", text, re.DOTALL).end():]
         words = len(body.split())
         if words > SKILL_BODY_MAX_WORDS:
@@ -297,37 +322,57 @@ def validate_json_file(path: Path, label: str):
         load_json(path, label)
 
 
-def _hook_scripts(config: dict) -> dict:
-    """Map each event name in a hook config to the set of `hooks/*.sh` scripts it wires.
-    Both host schemas nest differently (Claude groups by matcher, Cursor does not), so walk
-    whatever is under the event and collect every `command` string found."""
+def _hook_commands(config: dict) -> dict:
+    """Map each event name in a hook config to the `command` strings under it. Both host
+    schemas nest differently (Claude groups by matcher, Cursor does not), so walk whatever is
+    under the event and collect every `command` string found."""
     found = {}
     for event, entries in (config.get("hooks") or {}).items():
-        scripts = set()
-        stack = [entries]
+        commands, stack = [], [entries]
         while stack:
             node = stack.pop()
             if isinstance(node, dict):
-                cmd = node.get("command")
-                if isinstance(cmd, str):
-                    scripts.update(re.findall(r"hooks/([A-Za-z0-9._-]+\.sh)", cmd))
+                if isinstance(node.get("command"), str):
+                    commands.append(node["command"])
                 stack.extend(node.values())
             elif isinstance(node, list):
                 stack.extend(node)
-        found[event] = scripts
+        found[event] = commands
     return found
+
+
+def _hook_scripts(config: dict) -> dict:
+    """Map each event name in a hook config to the set of `hooks/*.sh` scripts it wires."""
+    return {event: {s for cmd in cmds for s in re.findall(r"hooks/([A-Za-z0-9._-]+\.sh)", cmd)}
+            for event, cmds in _hook_commands(config).items()}
 
 
 def validate_hook_parity():
     """Dual-host hook parity: the same scripts must be wired for the equivalent event on both
     hosts, every wired script must exist and be executable, and no `hooks/*.sh` may sit in the
-    tree unwired."""
+    tree unwired. Claude Code commands reach their script through `${CLAUDE_PLUGIN_ROOT}`; Cursor
+    does not set it, so Cursor commands stay workspace-relative."""
     claude_path, cursor_path = ROOT / "hooks" / "hooks.json", ROOT / "hooks" / "cursor-hooks.json"
-    if not (claude_path.is_file() and cursor_path.is_file()):
+    configs = [p for p in (claude_path, cursor_path) if p.is_file()]
+    if not configs and not list((ROOT / "hooks").glob("*.sh")):
+        return  # a plugin without hooks
+    for path in (claude_path, cursor_path):
+        if not path.is_file():
+            err(f"hooks/{path.name}: missing; every hook is wired for both hosts (dual-host parity)")
+    if len(configs) < 2:
         return
     claude, cursor = load_json(claude_path, "Claude hooks"), load_json(cursor_path, "Cursor hooks")
     if claude is None or cursor is None:
         return
+    for event, commands in _hook_commands(claude).items():
+        for cmd in commands:
+            if "hooks/" in cmd and "${CLAUDE_PLUGIN_ROOT}/hooks/" not in cmd:
+                err(f"hooks/hooks.json: {event} command '{cmd}' must reach its script through ${{CLAUDE_PLUGIN_ROOT}}")
+    for event, commands in _hook_commands(cursor).items():
+        for cmd in commands:
+            if "CLAUDE_PLUGIN_ROOT" in cmd:
+                err(f"hooks/cursor-hooks.json: {event} command '{cmd}' uses CLAUDE_PLUGIN_ROOT, which Cursor "
+                    f"does not set; keep the path workspace-relative")
     claude_events, cursor_events = _hook_scripts(claude), _hook_scripts(cursor)
     wired = set()
     for claude_event, cursor_event in EQUIVALENT_HOOK_EVENTS.items():
@@ -653,7 +698,8 @@ def _selftest_tree(root: Path, *, break_it=None):
     for d in ("skills/pgsql-thing/references", "skills/pgsql-coding", "skills/pgsql-lint-setup",
               "agents", "rules", "hooks", "references", "docs", "evals/thing-case/graders"):
         (root / d).mkdir(parents=True)
-    desc = "a: colon" if break_it == "frontmatter_colon" else "does a thing"
+    desc = {"frontmatter_colon": "a: colon",
+            "description_folded": ">-\n  " + "x" * 600 + "\n  " + "y" * 600}.get(break_it, "does a thing")
     name = "pgsql-other" if break_it == "skill_name" else "pgsql-thing"
     link = "" if break_it == "reference_unlinked" else "Read [topic.md](references/topic.md).\n"
     (root / "skills/pgsql-thing/SKILL.md").write_text(f"---\nname: {name}\ndescription: {desc}\n---\n\n{link}")
@@ -681,13 +727,18 @@ def _selftest_tree(root: Path, *, break_it=None):
     (root / BANNER).write_text("echo pgsql-thing\n")
     (root / BANNER).chmod(0o755)
     claude = json.loads(json.dumps(SELFTEST_HOOKS_CLAUDE))
-    claude["hooks"]["SessionStart"] = [{"hooks": [{"type": "command", "command": f"bash {BANNER}"}]}]
+    claude["hooks"]["SessionStart"] = [{"hooks": [{"type": "command", "command": f"bash ${{CLAUDE_PLUGIN_ROOT}}/{BANNER}"}]}]
     cursor = json.loads(json.dumps(SELFTEST_HOOKS_CURSOR))
     cursor["hooks"]["sessionStart"] = [{"command": f"bash {BANNER}"}]
     if break_it == "hook_parity":
         cursor["hooks"]["afterFileEdit"] = []
+    if break_it == "cursor_plugin_root":
+        cursor["hooks"]["afterFileEdit"] = [{"command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/a.sh"}]
+    if break_it == "claude_relative":
+        claude["hooks"]["PostToolUse"][0]["hooks"][0]["command"] = "bash hooks/a.sh"
     (root / "hooks/hooks.json").write_text(json.dumps(claude))
-    (root / "hooks/cursor-hooks.json").write_text(json.dumps(cursor))
+    if break_it != "hook_config_missing":
+        (root / "hooks/cursor-hooks.json").write_text(json.dumps(cursor))
     inventory = "" if break_it == "doc_inventory" else "pgsql-thing "
     for doc in ("README.md", "AGENTS.md", "docs/testing.md", "docs/install.md"):
         (root / doc).write_text(f"# Doc\n\n{inventory}pgsql-coding pgsql-lint-setup pgsql-reviewer a session-start\n")
@@ -706,6 +757,10 @@ def _selftest_tree(root: Path, *, break_it=None):
 SELFTEST_CASES = (
     ("hook wired for one host only", "hook_parity", (validate_hook_parity,)),
     ("wired hook not executable", "hook_not_executable", (validate_hook_parity,)),
+    ("one host's hook config is missing", "hook_config_missing", (validate_hook_parity,)),
+    ("Cursor hook command uses CLAUDE_PLUGIN_ROOT", "cursor_plugin_root", (validate_hook_parity,)),
+    ("Claude hook command is workspace-relative", "claude_relative", (validate_hook_parity,)),
+    ("folded description over the limit", "description_folded", (validate_skills,)),
     ("shipped skill missing from the docs", "doc_inventory", (validate_doc_inventories,)),
     ("unquoted ': ' in a description", "frontmatter_colon", (validate_skills,)),
     ("skill name != directory", "skill_name", (validate_skills,)),
