@@ -10,7 +10,8 @@ f="${CLAUDE_FILE_PATH:-}"; sid=""; payload=""
 if [ ! -t 0 ]; then
   payload="$(cat)"
   [ -n "$f" ] || f="$(printf '%s' "$payload" | grep -oE '"file_?[Pp]ath"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
-  sid="$(printf '%s' "$payload" | grep -oE '"session_id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
+  # Claude Code names the session session_id; Cursor names it conversation_id.
+  sid="$(printf '%s' "$payload" | grep -oE '"(session|conversation)_id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
 fi
 [ -n "$f" ] || exit 0
 case "$f" in *.sql) kind=sql;; *.go) kind=go;; *.php) kind=php;; *) exit 0;; esac
@@ -21,11 +22,12 @@ case "$f" in *.sql) kind=sql;; *.go) kind=go;; *.php) kind=php;; *) exit 0;; esa
 # escaped character or an ordinary one, so an embedded \" does not end the match early.
 json_field() { printf '%s' "$payload" | grep -oE "\"$1\"[[:space:]]*:[[:space:]]*\"(\\\\.|[^\"\\\\])*\""; }
 
-# Match the text the edit ADDS (Edit's new_string, Write's content), not old_string or the
-# tool_response echo. Cursor's afterFileEdit passes only a path, so that host matches the file.
+# Match the text the edit ADDS, not old_string or the tool_response echo: Claude Code's Edit
+# new_string or Write content, or each new_string in Cursor afterFileEdit's edits. A payload with
+# neither (a manual run with a path only) matches the whole file.
 case "$payload" in
-  *'"tool_input"'*) subject="$(json_field new_string; json_field content)"; what="this edit";;
-  *)                subject="$(cat "$f")"; what="this file";;
+  *'"new_string"'*|*'"content"'*) subject="$(json_field new_string; json_field content)"; what="this edit";;
+  *)                              subject="$(cat "$f")"; what="this file";;
 esac
 # -e: some patterns start with "-", which grep would otherwise read as an option. No \b: BSD
 # grep lacks it, so word edges are spelled out.
@@ -65,7 +67,8 @@ marker="${TMPDIR:-/tmp}/pgsql-coding-nudge.${sid}.${skill}"
 # what/topic/skill are fixed literals set in this script (no quotes or backslashes), so the
 # message needs no JSON escaping. Escape first if any of them is ever built from external text.
 msg="› pgsql-coding: ${what} touches ${topic}; load pgsql-coding:${skill} before continuing."
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -q '"hook_event_name"'; then
+# Cursor sends hook_event_name too ("afterFileEdit"), so match the Claude Code event by value.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -qE '"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'; then
   # Claude Code: additionalContext reaches the model; a top-level systemMessage reaches only the
   # user (https://code.claude.com/docs/en/hooks).
   printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$msg"

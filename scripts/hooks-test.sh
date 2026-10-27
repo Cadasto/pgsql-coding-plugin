@@ -31,15 +31,25 @@ chk "no squawk config offers lint setup"   "$(banner "$t/sql-only")" "/pgsql-lin
 chk_absent "squawk config omits lint setup" "$(banner "$t/with-squawk")" "/pgsql-lint-setup"
 chk_silent "go repo without pgx is silent" "$(banner "$t/go-plain")"
 chk_silent "unrelated repo is silent"      "$(banner "$t/none")"
+for d in go-pgx none; do
+  banner "$t/$d" >/dev/null; st=$?
+  [ "$st" -eq 0 ] && ok "session-start exits 0 ($d)" || fail "session-start exits 0 ($d): exited $st"
+done
 
 # --- skill-nudge -------------------------------------------------------------------------------
 # p_edit/p_write mirror a real Claude Code PostToolUse payload (hook_event_name, tool_input with
-# BOTH old_string and new_string, a tool_response echo); p_path mirrors Cursor's afterFileEdit.
+# BOTH old_string and new_string, a tool_response echo). p_cursor mirrors Cursor's afterFileEdit
+# (conversation_id, hook_event_name "afterFileEdit", file_path, edits[]), per
+# https://cursor.com/docs/agent/hooks. p_path carries a path only, as a manual run would.
 p_edit() { # SESSION FILE OLD NEW RESPONSE
   printf '{"session_id":"%s","hook_event_name":"PostToolUse","tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"%s","new_string":"%s"},"tool_response":{"filePath":"%s","originalFile":"%s"}}' \
     "$1" "$2" "$3" "$4" "$2" "${5:-}"
 }
 p_write() { printf '{"session_id":"%s","hook_event_name":"PostToolUse","tool_name":"Write","tool_input":{"file_path":"%s","content":"%s"}}' "$1" "$2" "$3"; }
+p_cursor() { # CONVERSATION FILE OLD NEW
+  printf '{"conversation_id":"%s","generation_id":"g1","hook_event_name":"afterFileEdit","workspace_roots":["/w"],"file_path":"%s","edits":[{"old_string":"%s","new_string":"%s"}]}' \
+    "$1" "$2" "$3" "$4"
+}
 p_path()  { printf '{"session_id":"%s","file_path":"%s"}' "$1" "$2"; }
 nudge() { # NAME PAYLOAD -> stdout; flags a non-zero exit
   local out st
@@ -90,9 +100,16 @@ out="$(printf '%s' "$(p_edit "$s5" "$t/repo/q.sql" '' 'CREATE INDEX ON t (a);')"
 chk "hook_event_name delivers additionalContext" "$out" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":'
 clean "$s5"
 s6="pg-test-cursor-$$"; clean "$s6"
-out="$(printf '%s' "$(p_path "$s6" "$t/repo/j.sql")" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
+out="$(printf '%s' "$(p_cursor "$s6" "$t/repo/q.sql" '' "SELECT doc->>'k' FROM t")" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
 case "$out" in '{'*) fail "nudge is a plain line under Cursor: got JSON '$out'";; *"pgsql-coding:pgsql-jsonb"*) ok "nudge is a plain line under Cursor";; *) fail "nudge is a plain line under Cursor: got '$out'";; esac
+chk "Cursor's edits[].new_string is the text matched" "$out" "this edit touches"
+chk_silent "Cursor nudges once per conversation_id" \
+  "$(printf '%s' "$(p_cursor "$s6" "$t/repo/q.sql" '' "SELECT doc @> '{}' FROM t")" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
 clean "$s6"
+s7="pg-test-cursor-old-$$"; clean "$s7"
+chk_silent "Cursor: deleting a jsonb predicate is silent" \
+  "$(printf '%s' "$(p_cursor "$s7" "$t/repo/store.go" "doc->>'k'" 'x := 1')" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
+clean "$s7"
 
 # --- lint-on-save ------------------------------------------------------------------------------
 # A stub squawk on PATH prints gcc-style findings (plus a quote, a backslash and a colour code
@@ -117,7 +134,7 @@ chk_absent "colour codes are stripped"              "$out" "[31m"
 if command -v python3 >/dev/null 2>&1; then
   if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "lint-on-save emits valid JSON"; else fail "lint-on-save emits valid JSON: '$out'"; fi
 fi
-out="$(printf '%s' "$(p_path cur "$t/lint/migrations/0002.sql")" | env -u CLAUDE_PLUGIN_ROOT PATH="$t/bin:$PATH" bash "$here/hooks/lint-on-save.sh")"
+out="$(printf '%s' "$(p_cursor cur "$t/lint/migrations/0002.sql" '' 'x')" | env -u CLAUDE_PLUGIN_ROOT PATH="$t/bin:$PATH" bash "$here/hooks/lint-on-save.sh")"
 case "$out" in '{'*) fail "lint-on-save is plain text under Cursor: got JSON";; *"require-concurrent-index-creation"*) ok "lint-on-save is plain text under Cursor";; *) fail "lint-on-save is plain text under Cursor: got '$out'";; esac
 chk_silent "no .squawk.toml means no lint" "$(lint "$(p_write lint "$t/nolint/0002.sql" 'x')")"
 chk_silent "non-SQL file is not linted"    "$(lint "$(p_write lint "$t/repo/notes.md" 'x')")"

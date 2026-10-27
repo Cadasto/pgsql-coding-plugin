@@ -55,8 +55,8 @@ Shared assets (skills, agents, hook scripts) are consumed by both hosts; host-sp
 - **Cursor hooks**: `hooks/cursor-hooks.json` wires the same scripts to `sessionStart` and `afterFileEdit` with **workspace-relative** commands.
 - **Shared hook scripts** (host-agnostic; all exit 0 always):
   - `hooks/session-start.sh`: detects PostgreSQL use (pgx or lib/pq in `go.mod`, `ext-pdo_pgsql` in `composer.json`, a postgres image in a compose file, or a `*.sql` file) and prints one line naming the floor, the skills and the reviewer.
-  - `hooks/lint-on-save.sh`: after a `*.sql` edit, runs `squawk --reporter gcc` on that file when squawk is on PATH and a `.squawk.toml` exists in the file's directory or a parent; findings reach the model as `hookSpecificOutput.additionalContext` (Claude Code) or plain lines (Cursor).
-  - `hooks/skill-nudge.sh`: after a `.sql`, `.go` or `.php` edit, names ONE focused skill matching the text the edit adds, once per skill per session. Go and PHP edits nudge only on unmistakable SQL.
+  - `hooks/lint-on-save.sh`: after a `*.sql` edit, runs `squawk --reporter gcc` on that file when squawk is on PATH and a `.squawk.toml` exists in the file's directory or a parent; findings reach the model as `hookSpecificOutput.additionalContext` (Claude Code) or print as plain lines (Cursor, whose `afterFileEdit` documents no output, so delivery there is unverified).
+  - `hooks/skill-nudge.sh`: after a `.sql`, `.go` or `.php` edit, names ONE focused skill matching the text the edit adds (Claude's `new_string` or `content`, Cursor's `edits[].new_string`), once per skill per session (`session_id` or Cursor's `conversation_id`). Go and PHP edits nudge only on unmistakable SQL.
 - **References**: top-level `references/squawk.toml`, the shipped squawk config; the `/pgsql-lint-setup` scaffold block must stay byte-identical to it.
 - **Evals**: `evals/<case>/` with `prompt.md` and `graders/`, run by `claude plugin eval`. Results go to `evals/results/`, which is gitignored.
 - **Scripts**: `scripts/validate.sh` (wraps the stdlib-only `scripts/validate.py`), `scripts/hooks-test.sh`, `scripts/plan-summary-test.py`.

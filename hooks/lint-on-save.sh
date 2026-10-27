@@ -48,7 +48,8 @@ out="$(printf '%s\n' "$out" | sed -e "s/${esc}\[[0-9;]*m//g" | grep -E ':[0-9]+:
 [ -n "$out" ] || exit 0
 
 msg="› pgsql-coding: squawk reports on $(basename "$f"); load pgsql-coding:pgsql-migrations and fix or justify each line:"
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -q '"hook_event_name"'; then
+# Cursor sends hook_event_name too ("afterFileEdit"), so match the Claude Code event by value.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -qE '"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'; then
   # Claude Code: build the JSON string by hand (no jq). Escape backslashes and quotes, turn tabs
   # and newlines into escapes, and drop any other control character squawk might print.
   body="$(printf '%s\n%s' "$msg" "$out" \

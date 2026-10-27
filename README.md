@@ -65,8 +65,8 @@ See [docs/install.md](docs/install.md) for marketplace, local-development, updat
 | Agent `pgsql-reviewer` | Report-only, context-isolated SQL reviewer. Loads the skills, returns severity-ranked findings, never edits files or runs DML, and dispatches no sub-agents. |
 | Agent `pgsql-plan-analyst` | Report-only, context-isolated `EXPLAIN` analyst for a long plan or a before-and-after pair. Runs the plan summariser, reads only the flagged nodes, and returns where the time goes, where an estimate error starts, and the command that confirms each fix. |
 | Session-start hook | Detects PostgreSQL use (pgx or lib/pq in `go.mod`, `ext-pdo_pgsql` in `composer.json`, a postgres image in a compose file, or a `*.sql` file) and prints one standards line; dual-host. |
-| Lint-on-save hook | After a `*.sql` edit, runs squawk on that file when the project has a `.squawk.toml` and squawk is installed, and hands the findings to the model; dual-host; never blocks an edit. |
-| Skill-nudge hook | After a `.sql`, `.go` or `.php` edit, names the one focused skill the added text calls for, once per skill per session; dual-host. |
+| Lint-on-save hook | After a `*.sql` edit, runs squawk on that file when the project has a `.squawk.toml` and squawk is installed, and hands the findings to the model; wired for both hosts (on Cursor, delivery is unverified: [install.md](docs/install.md#hooks)); never blocks an edit. |
+| Skill-nudge hook | After a `.sql`, `.go` or `.php` edit, names the one focused skill the added text calls for, once per skill per session; wired for both hosts (on Cursor, delivery is unverified: [install.md](docs/install.md#hooks)). |
 | Squawk config `references/squawk.toml` | The reference squawk configuration `/pgsql-lint-setup` writes. |
 | Cursor rule `pgsql-context.mdc` | `**/*.sql`-scoped guidance mirroring the router for Cursor. |
 
