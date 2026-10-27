@@ -11,8 +11,8 @@ This page is for contributors adding or changing a skill (including a slash-comm
 
 - **Router skill** (`pgsql-coding`): auto-invoked; names the tool to run and the focused skill to load. It holds no rules beyond the minimum checklist. Its one reference, `versions.md`, says which feature needs PostgreSQL 17, 18 or 19.
 - **Focused skill** (`pgsql-query`, `pgsql-jsonb`, `pgsql-schema`, `pgsql-indexing`, `pgsql-performance`, `pgsql-migrations`): load-on-use. `SKILL.md` carries the rules most tasks need and a table that routes to its references. This follows the progressive-disclosure pattern in Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices): the description is always on, the body loads on use, and a reference costs nothing until it is read.
-- **Command skill** (`/pgsql-lint-setup`): a thin one-shot `SKILL.md` with `argument-hint` and `allowed-tools`, using `$ARGUMENTS` in the body.
-- **Agent** (`pgsql-reviewer`): a context-isolated specialist. Use **`tools:`**, **never** `allowed-tools:`, which an agent file ignores, so the agent silently inherits *all* tools. Include `Skill` in `tools:` so the agent can load the skills, because a subagent does not inherit the parent's loaded skills.
+- **Command skill** (`/pgsql-lint-setup`): a thin one-shot `SKILL.md`. On Claude Code it carries `argument-hint` and `allowed-tools` and reads `$ARGUMENTS`. Cursor ignores those fields; the directory comes from the user's message and defaults to the repository root.
+- **Agent** (`pgsql-reviewer`, `pgsql-plan-analyst`): a context-isolated specialist. Use **`tools:`**, **never** `allowed-tools:`, which an agent file ignores, so on Claude Code the agent silently inherits *all* tools. Include `Skill` in `tools:` so a Claude Code subagent can load the skills, because it does not inherit the parent's loaded skills. Cursor does not enforce `tools:` and has no Skill tool: the body tells it to read `skills/<name>/SKILL.md` in the plugin install, or to open `/<name>`. Report-only agents set `permissionMode: readonly`, which is the key Cursor plugin agents honor (`readonly: true` is ignored there).
 - **Cursor rule** (`rules/pgsql-context.mdc`): a Cursor-only `.mdc` with `description`, `globs` and `alwaysApply` that mirrors the router.
 
 ## The `description` (the trigger)
@@ -108,7 +108,7 @@ Each reference's `## Sources` lists the manual chapters it rests on; those pages
 
 ## Dual-host parity
 
-Skills (slash-command skills included) and agents are shared by both hosts. The **Cursor** manifest (`.cursor-plugin/plugin.json`) declares each component path; **Claude** discovers the default folders. Keep the two manifests' shared metadata identical (`scripts/validate.py` checks parity), and the Cursor hook commands **workspace-relative** (`bash hooks/session-start.sh`), never `${CLAUDE_PLUGIN_ROOT}`.
+Skills (slash-command skills included) and agents are shared by both hosts. The **Cursor** manifest (`.cursor-plugin/plugin.json`) declares each component path; **Claude** discovers the default folders. Keep the two manifests' shared metadata identical (`scripts/validate.py` checks parity). Cursor hook commands are **relative to the plugin install** (`bash hooks/session-start.sh`), never `${CLAUDE_PLUGIN_ROOT}`, because a plugin hook runs in that install directory. A shared skill that tells the model to open another skill names both hosts: Claude Code's Skill tool takes `pgsql-coding:<skill>`, and Cursor takes `/<skill>` plus a read of that skill's `SKILL.md` in the plugin install.
 
 ## Before committing
 

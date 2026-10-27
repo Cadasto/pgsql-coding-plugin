@@ -33,8 +33,13 @@ uses_postgres() {
 if uses_postgres; then
   lint=" · /pgsql-lint-setup adds squawk (no .squawk.toml found)"
   [ -e .squawk.toml ] && lint=""
-  # A fixed literal with no quotes or backslashes, so the JSON form needs no escaping.
-  line="› PostgreSQL workspace: pgsql-coding (PostgreSQL 18 floor, 19 as hints). Load pgsql-coding then the skill for the change (pgsql-query · pgsql-jsonb · pgsql-schema · pgsql-indexing · pgsql-performance · pgsql-migrations); pgsql-reviewer for a review, pgsql-plan-analyst for a long EXPLAIN plan${lint}. EXPLAIN (ANALYZE, BUFFERS) before proposing an index or rewrite; squawk on migrations."
+  # Fixed literals with no quotes or backslashes, so the JSON form needs no escaping.
+  skills="pgsql-query · pgsql-jsonb · pgsql-schema · pgsql-indexing · pgsql-performance · pgsql-migrations"
+  if [ -n "$cursor" ]; then
+    line="› PostgreSQL workspace: pgsql-coding (PostgreSQL 18 floor, 19 as hints). Open /pgsql-coding, then the skill for the change (/pgsql-query · /pgsql-jsonb · /pgsql-schema · /pgsql-indexing · /pgsql-performance · /pgsql-migrations); pgsql-reviewer for a review, pgsql-plan-analyst for a long EXPLAIN plan${lint}. EXPLAIN (ANALYZE, BUFFERS) before proposing an index or rewrite; squawk on migrations."
+  else
+    line="› PostgreSQL workspace: pgsql-coding (PostgreSQL 18 floor, 19 as hints). Load pgsql-coding then the skill for the change (${skills}); pgsql-reviewer for a review, pgsql-plan-analyst for a long EXPLAIN plan${lint}. EXPLAIN (ANALYZE, BUFFERS) before proposing an index or rewrite; squawk on migrations."
+  fi
   if [ -n "$cursor" ]; then
     printf '{"additional_context":"%s"}\n' "$line"
   else

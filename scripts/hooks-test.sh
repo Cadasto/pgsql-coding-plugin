@@ -40,6 +40,7 @@ done
 cursor_banner() { (cd "$t/none" && CURSOR_PLUGIN_ROOT="$t/none" CURSOR_PROJECT_DIR="$1" bash "$here/hooks/session-start.sh"); }
 out="$(cursor_banner "$t/go-pgx")"
 chk "Cursor: the workspace, not the plugin directory, is inspected" "$out" '{"additional_context":"› PostgreSQL workspace'
+chk "Cursor banner names a slash skill" "$out" "/pgsql-query"
 if command -v python3 >/dev/null 2>&1; then
   if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "Cursor: session-start emits valid JSON"; else fail "Cursor: session-start emits valid JSON: '$out'"; fi
 fi
@@ -111,13 +112,32 @@ chk "hook_event_name delivers additionalContext" "$out" '{"hookSpecificOutput":{
 clean "$s5"
 s6="pg-test-cursor-$$"; clean "$s6"
 out="$(printf '%s' "$(p_cursor "$s6" "$t/repo/j.sql")" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
-chk "Cursor gets additional_context, matched on the file" "$out" '{"additional_context":"› pgsql-coding: this file touches JSON or jsonb; load pgsql-coding:pgsql-jsonb'
+chk "Cursor gets additional_context, matched on the file" "$out" '{"additional_context":"› pgsql-coding: this file touches JSON or jsonb; read /pgsql-jsonb'
 if command -v python3 >/dev/null 2>&1; then
   if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "Cursor: skill-nudge emits valid JSON"; else fail "Cursor: skill-nudge emits valid JSON: '$out'"; fi
 fi
 chk_silent "Cursor nudges once per conversation_id" \
   "$(printf '%s' "$(p_cursor "$s6" "$t/repo/j.sql")" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
 clean "$s6"
+
+# StrReplace carries new_string, so Cursor classifies the added text. A relative path is joined
+# to CURSOR_PROJECT_DIR because the hook runs in the plugin install, not the workspace.
+p_cursor_edit() { # CONVERSATION FILE NEW
+  printf '{"conversation_id":"%s","hook_event_name":"postToolUse","cursor_version":"1.7.2","workspace_roots":["/w"],"user_email":null,"transcript_path":null,"tool_name":"StrReplace","tool_input":{"path":"%s","old_string":"x","new_string":"%s"},"tool_output":"{}","duration":1}' \
+    "$1" "$2" "$3"
+}
+printf 'SELECT 1;\n' > "$t/repo/plain.sql"
+s7="pg-test-strreplace-$$"; clean "$s7"
+out="$(printf '%s' "$(p_cursor_edit "$s7" "$t/repo/plain.sql" 'CREATE INDEX ON t (a);')" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
+chk "Cursor StrReplace nudges from new_string" "$out" 'this edit touches an index; read /pgsql-indexing'
+clean "$s7"
+printf "SELECT doc->>'k' FROM t;\n" > "$t/repo/rel.sql"
+s8="pg-test-rel-$$"; clean "$s8"
+out="$(printf '%s' "$(p_cursor_edit "$s8" "rel.sql" 'SELECT 1;')" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
+chk_silent "relative Cursor path without CURSOR_PROJECT_DIR is silent" "$out"
+out="$(printf '%s' "$(p_cursor_edit "$s8" "rel.sql" 'SELECT 1;')" | env -u CLAUDE_PLUGIN_ROOT CURSOR_PROJECT_DIR="$t/repo" bash "$here/hooks/skill-nudge.sh")"
+chk "relative Cursor path is joined to CURSOR_PROJECT_DIR" "$out" 'this edit touches a SQL statement; read /pgsql-query'
+clean "$s8"
 
 # --- lint-on-save ------------------------------------------------------------------------------
 # A stub squawk on PATH prints gcc-style findings (plus a quote, a backslash and a colour code
@@ -144,6 +164,7 @@ if command -v python3 >/dev/null 2>&1; then
 fi
 out="$(printf '%s' "$(p_cursor cur "$t/lint/migrations/0002.sql")" | env -u CLAUDE_PLUGIN_ROOT PATH="$t/bin:$PATH" bash "$here/hooks/lint-on-save.sh")"
 chk "Cursor: findings reach the model as additional_context" "$out" '{"additional_context":"› pgsql-coding: squawk reports on 0002.sql'
+chk "Cursor lint names the slash skill" "$out" "read /pgsql-migrations"
 if command -v python3 >/dev/null 2>&1; then
   if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "Cursor: lint-on-save emits valid JSON"; else fail "Cursor: lint-on-save emits valid JSON: '$out'"; fi
 fi

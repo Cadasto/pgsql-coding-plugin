@@ -25,7 +25,10 @@ Route the PostgreSQL task to the skill and the tool that own it. This skill is a
 
 ## Route, then load
 
-Before writing or reviewing SQL, load the focused skill that matches the change with the Skill tool (`pgsql-coding:pgsql-jsonb`, and so on). Do not work from memory of it.
+Before writing or reviewing SQL, load the focused skill that matches the change. Do not work from memory of it.
+
+- **Claude Code.** Invoke the Skill tool with `pgsql-coding:pgsql-jsonb`, and the same `pgsql-coding:` prefix for every skill in the table.
+- **Cursor.** Open `/pgsql-jsonb` (the same `/` prefix for every skill in the table). Its files are in the plugin install, next to this skill: read `../pgsql-jsonb/SKILL.md` from this file's directory. There is no Skill tool, and `pgsql-coding:pgsql-jsonb` is not a path.
 
 | The change touches | Load |
 |---|---|
@@ -38,7 +41,7 @@ Before writing or reviewing SQL, load the focused skill that matches the change 
 
 One load per skill per session is enough. A change usually needs two skills: a new jsonb query needs `pgsql-jsonb` and `pgsql-query`; a new index in a migration needs `pgsql-indexing` and `pgsql-migrations`. SQL inside Go or PHP code also needs that language's plugin (`go-coding`, `php-coding`) for the host code.
 
-Subagents do not inherit loaded skills. An orchestrator that dispatches implementers or reviewers puts this table in every brief, with the database the subagent may query, if any.
+Subagents do not inherit loaded skills. An orchestrator that dispatches implementers or reviewers puts this table in every brief, with the database the subagent may query, if any. On Claude Code the brief names `pgsql-coding:pgsql-query`. On Cursor it names `/pgsql-query` and tells the subagent to read that skill's `SKILL.md` from the plugin install.
 
 ## Running SQL against a database
 
@@ -73,7 +76,7 @@ Anything a person reads, such as a PR description, a review comment or a questio
 
 ## For a focused review or a long plan
 
-Dispatch the `pgsql-reviewer` agent. It is report-only and context-isolated: it loads these skills, reads SQL in `.sql` files, migrations and Go or PHP query strings, and returns severity-ranked findings. If a workflow already owns the reviewer seat, that reviewer loads the focused skills itself instead; one review seat per change.
+Dispatch the `pgsql-reviewer` agent. It is report-only and context-isolated: it reads these skills, reads SQL in `.sql` files, migrations and Go or PHP query strings, and returns severity-ranked findings. If a workflow already owns the reviewer seat, that reviewer reads the focused skills itself instead; one review seat per change.
 
-Dispatch the `pgsql-plan-analyst` agent for an `EXPLAIN` plan over about 50 lines or two plans to compare, with the plan saved to a file. It runs `pgsql-performance`'s plan summariser in its own context and returns a ranked diagnosis, so the plan never fills this conversation.
+Dispatch the `pgsql-plan-analyst` agent for an `EXPLAIN` plan over about 50 lines or two plans to compare, with the plan saved to a file. It runs `scripts/plan-summary.py` from the `pgsql-performance` skill directory and returns a ranked diagnosis, so the plan never fills this conversation.
 

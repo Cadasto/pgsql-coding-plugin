@@ -11,7 +11,7 @@ Checks:
   * hook-config JSON validity, and dual-host hook parity: both configs present, the same
     ``hooks/*.sh`` wired for the equivalent event on both hosts, each wired script present and
     executable, none unwired; Claude commands through ``${CLAUDE_PLUGIN_ROOT}``, Cursor commands
-    workspace-relative and Cursor's config at ``"version": 1``;
+    relative to the plugin install and Cursor's config at ``"version": 1``;
   * SKILL.md / agent / command frontmatter: required keys, ``name`` matching the directory or
     filename, descriptions within the Agent Skills limit (folded and literal blocks measured
     whole), no unquoted ``: `` or `` #``. Agents
@@ -351,7 +351,7 @@ def validate_hook_parity():
     """Dual-host hook parity: the same scripts must be wired for the equivalent event on both
     hosts, every wired script must exist and be executable, and no `hooks/*.sh` may sit in the
     tree unwired. Claude Code commands reach their script through `${CLAUDE_PLUGIN_ROOT}`; Cursor
-    does not set it, so Cursor commands stay workspace-relative."""
+    does not set it, so Cursor commands stay relative to the plugin install."""
     claude_path, cursor_path = ROOT / "hooks" / "hooks.json", ROOT / "hooks" / "cursor-hooks.json"
     configs = [p for p in (claude_path, cursor_path) if p.is_file()]
     if not configs and not list((ROOT / "hooks").glob("*.sh")):
@@ -374,7 +374,7 @@ def validate_hook_parity():
         for cmd in commands:
             if "CLAUDE_PLUGIN_ROOT" in cmd:
                 err(f"hooks/cursor-hooks.json: {event} command '{cmd}' uses CLAUDE_PLUGIN_ROOT, which Cursor "
-                    f"does not set; keep the path workspace-relative")
+                    f"does not set; keep the path relative to the plugin install")
     claude_events, cursor_events = _hook_scripts(claude), _hook_scripts(cursor)
     wired = set()
     for claude_event, cursor_event in EQUIVALENT_HOOK_EVENTS.items():

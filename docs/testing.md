@@ -32,7 +32,7 @@ CI (`.github/workflows/validate.yml`) runs the validator, `--selftest`, the hook
 `scripts/hooks-test.sh` covers all three hooks with real host payload shapes:
 
 - `session-start`: detection by `go.mod` (pgx or lib/pq), `composer.json` (`ext-pdo_pgsql`), a compose file with a postgres image, or a `*.sql` file; silence elsewhere; the `/pgsql-lint-setup` hint only without a `.squawk.toml`; exit 0; under Cursor, the workspace in `CURSOR_PROJECT_DIR` inspected rather than the plugin directory, and valid JSON `additional_context`.
-- `skill-nudge`: one skill per edit, chosen from the text the edit adds (not the deleted text or the tool response echo) in Claude Code's payload; the whole file under Cursor's `postToolUse` payload, whose `Write` input is undocumented; once per skill per session (`session_id` or `conversation_id`); `hookSpecificOutput.additionalContext` under Claude Code, `additional_context` under Cursor, both valid JSON.
+- `skill-nudge`: one skill per edit, chosen from the text the edit adds (not the deleted text or the tool response echo) in Claude Code's payload and in Cursor's `StrReplace` `new_string`; the whole file when a Cursor payload has no added-text field; a relative Cursor path joined to `CURSOR_PROJECT_DIR`; once per skill per session (`session_id` or `conversation_id`); `hookSpecificOutput.additionalContext` under Claude Code (`pgsql-coding:<skill>`), `additional_context` under Cursor (`/<skill>`), both valid JSON.
 - `lint-on-save`: a stub `squawk` on PATH proves the findings reach the model as valid JSON on both hosts with colour codes stripped, that nothing runs without a `.squawk.toml` or without squawk, and that the hook always exits 0.
 
 ## Plan summariser tests
@@ -71,6 +71,6 @@ Load a working copy (see [install.md](install.md)), then, in a repository that u
 - **`/pgsql-lint-setup`**: writes `.squawk.toml` and does not overwrite an existing one unprompted.
 - **`skill-nudge` and `lint-on-save` hooks**: edit a `.sql` file that adds a jsonb predicate and confirm the `pgsql-jsonb` nudge; edit a migration with `CREATE INDEX` (no `CONCURRENTLY`) in a repository with a `.squawk.toml` and confirm the squawk finding arrives.
 - **Cursor rule**: open a `.sql` file and confirm `pgsql-context.mdc` attaches.
-- **Cursor hooks**: in a PostgreSQL workspace other than this repository, confirm the session-start line reaches the agent and an edit to a `.sql` file triggers the nudge. Cursor does not document the `Write` tool's input fields, so this is the only check that the hooks find the edited file there.
+- **Cursor hooks**: in a PostgreSQL workspace other than this repository, confirm the session-start line reaches the agent (it names `/pgsql-query`) and that both a new `.sql` file (`Write`) and an edit of an existing one (`StrReplace`) trigger the nudge. `afterFileEdit` is not the event: it documents no output, so the nudge would not reach the model.
 
 After editing content, reinstall or restart the session.

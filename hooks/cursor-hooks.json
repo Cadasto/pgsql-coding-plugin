@@ -10,12 +10,12 @@
     "postToolUse": [
       {
         "command": "bash hooks/lint-on-save.sh",
-        "matcher": "Write",
+        "matcher": "Write|StrReplace",
         "timeout": 20
       },
       {
         "command": "bash hooks/skill-nudge.sh",
-        "matcher": "Write",
+        "matcher": "Write|StrReplace",
         "timeout": 5
       }
     ]

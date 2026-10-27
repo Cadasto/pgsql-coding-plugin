@@ -6,7 +6,7 @@ alwaysApply: false
 
 # PostgreSQL coding standards
 
-This Cursor rule mirrors the `pgsql-coding` router skill. Apply it when editing SQL, and when a Go or PHP change carries SQL text. Two principles:
+This Cursor rule mirrors the `pgsql-coding` router skill. It attaches to `.sql` files only. SQL inside a `.go` or `.php` file is not covered by this rule; open `/pgsql-query` or the sibling skill the change needs. Two principles:
 
 - **Evidence beats reasoning.** A plan from `EXPLAIN (ANALYZE, BUFFERS)` decides whether an index or a rewrite helps. `squawk` decides whether a migration takes a dangerous lock. `plpgsql_check` finds PL/pgSQL errors. Run the tool; do not reason out what it decides.
 - **The floor is PostgreSQL 18.** PostgreSQL 19 additions are hints until the project's server runs 19. The router's `versions.md` reference lists what needs 17, 18 or 19.
@@ -23,7 +23,7 @@ This Cursor rule mirrors the `pgsql-coding` router skill. Apply it when editing 
 
 ## Route, then load
 
-This rule is an index, not the standard. Before writing or reviewing SQL, open the focused skill matching the change. It carries the cited rules and the judgment:
+This rule is an index, not the standard, and it is in context only for `.sql` files. Before writing or reviewing SQL, open the focused skill matching the change (`/pgsql-query`, and the same `/` prefix for each name below). On disk that file is `skills/<name>/SKILL.md` in the plugin install, not in the repository. It carries the cited rules and the judgment:
 
 - a query, a SQL string in `.go` or `.php` code, `JOIN`, `GROUP BY`, `ON CONFLICT`, `MERGE`, `COPY`, `FOR UPDATE`, `pg_advisory_*`, a transaction, `pgx.`, `pgxpool.`, `PDO` → `pgsql-query`
 - `jsonb`, `json`, `->`, `->>`, `@>`, `@?`, a `jsonb_*` or `JSON_*` function, `json.RawMessage` in a scan → `pgsql-jsonb`
@@ -34,7 +34,7 @@ This rule is an index, not the standard. Before writing or reviewing SQL, open t
 
 ## Reading a plan
 
-Summarise a plan before reading it: `python3 skills/pgsql-performance/scripts/plan-summary.py plan.txt`, from the plugin root, prints where the time goes and where a row-estimate error starts. For a plan over about 50 lines or two plans to compare, use the `pgsql-plan-analyst` agent with the plan in a file.
+Summarise a plan before reading it. The script is `scripts/plan-summary.py` in the installed `pgsql-performance` skill (the directory of that skill's `SKILL.md`), not `skills/pgsql-performance/` in the repository. Run `python3 "<that directory>/scripts/plan-summary.py" plan.txt`. For a plan over about 50 lines or two plans to compare, use the `pgsql-plan-analyst` agent with the plan in a file.
 
 ## Reviewing SQL
 

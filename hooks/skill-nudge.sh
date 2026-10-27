@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse (Claude Code) / postToolUse on Write (Cursor) hook: after a .sql, .go or .php file
+# PostToolUse (Claude Code) / postToolUse on Write or StrReplace (Cursor) hook: after a .sql, .go or .php file
 # is edited, name ONE focused pgsql-coding skill the edit calls for, as context the model reads:
 # hookSpecificOutput.additionalContext (Claude Code) or additional_context (Cursor). Once per
 # skill per session. Always exits 0; never blocks an edit.
@@ -16,6 +16,18 @@ if [ ! -t 0 ]; then
   sid="$(printf '%s' "$payload" | grep -oE '"(session|conversation)_id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"$/\1/')"
 fi
 [ -n "$f" ] || exit 0
+# Cursor plugin hooks run in the plugin install. A relative tool path is relative to the
+# workspace, which CURSOR_PROJECT_DIR names. Absolute paths are left as they are.
+cursor=0
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -q '"cursor_version"'; then
+  cursor=1
+fi
+if [ "$cursor" -eq 1 ] && [ -n "${CURSOR_PROJECT_DIR:-}" ]; then
+  case "$f" in
+    /*) ;;
+    *) f="${CURSOR_PROJECT_DIR%/}/$f" ;;
+  esac
+fi
 case "$f" in *.sql) kind=sql;; *.go) kind=go;; *.php) kind=php;; *) exit 0;; esac
 [ -f "$f" ] || exit 0
 [ -n "$sid" ] || sid="ppid$PPID"
@@ -25,8 +37,9 @@ case "$f" in *.sql) kind=sql;; *.go) kind=go;; *.php) kind=php;; *) exit 0;; esa
 json_field() { printf '%s' "$payload" | grep -oE "\"$1\"[[:space:]]*:[[:space:]]*\"(\\\\.|[^\"\\\\])*\""; }
 
 # Match the text the edit ADDS, not old_string or the tool_response echo: Claude Code's Edit
-# new_string or Write content. A payload with neither (Cursor, whose Write input is undocumented,
-# or a manual run with a path only) matches the whole file.
+# new_string or Write content, and Cursor's StrReplace new_string. A payload with neither
+# (Cursor Write, whose input fields are undocumented, or a manual run with a path only)
+# matches the whole file.
 case "$payload" in
   *'"new_string"'*|*'"content"'*) subject="$(json_field new_string; json_field content)"; what="this edit";;
   *)                              subject="$(cat "$f")"; what="this file";;
@@ -68,9 +81,14 @@ marker="${TMPDIR:-/tmp}/pgsql-coding-nudge.${sid}.${skill}"
 : > "$marker" 2>/dev/null || true
 # what/topic/skill are fixed literals set in this script (no quotes or backslashes), so the
 # message needs no JSON escaping. Escape first if any of them is ever built from external text.
-msg="› pgsql-coding: ${what} touches ${topic}; load pgsql-coding:${skill} before continuing."
+if [ "$cursor" -eq 1 ]; then
+  how="read /${skill}"
+else
+  how="load pgsql-coding:${skill}"
+fi
+msg="› pgsql-coding: ${what} touches ${topic}; ${how} before continuing."
 # Cursor first: it sends hook_event_name too, and every Cursor payload carries cursor_version.
-if [ -n "${CURSOR_PLUGIN_ROOT:-}" ] || printf '%s' "$payload" | grep -q '"cursor_version"'; then
+if [ "$cursor" -eq 1 ]; then
   # Cursor postToolUse: additional_context is injected after the tool result
   # (https://cursor.com/docs/agent/hooks).
   printf '{"additional_context":"%s"}\n' "$msg"
