@@ -84,7 +84,7 @@ python3 scripts/validate.py --check-links # every cited URL resolves (needs the 
 ./scripts/hooks-test.sh                   # bash tests for the three hooks
 python3 scripts/plan-summary-test.py      # the plan summariser against real PostgreSQL 18 plans
 claude plugin validate .                  # manifest + component structure (no extra deps)
-claude --plugin-dir /path/to/pgsql-coding # load locally for one session (dogfooding)
+claude --plugin-dir /path/to/pgsql-coding-plugin # load locally for one session (dogfooding)
 ```
 
 What each check covers is in [docs/testing.md](docs/testing.md#validation).

@@ -44,7 +44,7 @@ The plugin owns the judgement layer. The deterministic checks stay with the tool
 /plugin install pgsql-coding@cadasto
 ```
 
-Or load a local working copy for a single session: `claude --plugin-dir /path/to/pgsql-coding`.
+Or load a local working copy for a single session: `claude --plugin-dir /path/to/pgsql-coding-plugin`.
 
 **Cursor**: add this repository as a plugin (Settings → Plugins, from a Git URL or a local path). The repo includes a Cursor manifest at [`.cursor-plugin/plugin.json`](.cursor-plugin/plugin.json); skills, agents, references and hook scripts are shared with the Claude plugin.
 

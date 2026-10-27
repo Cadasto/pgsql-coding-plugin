@@ -16,10 +16,10 @@ The marketplace name is `cadasto`, so the plugin is addressed as `pgsql-coding@c
 ### Load a local working copy (for development)
 
 ```bash
-claude --plugin-dir /path/to/pgsql-coding
+claude --plugin-dir /path/to/pgsql-coding-plugin
 ```
 
-`--plugin-dir` loads the plugin from disk for **that session only**, which makes it the right tool for dogfooding an unreleased working copy. It is repeatable, so `--plugin-dir /path/to/go-coding-plugin --plugin-dir /path/to/pgsql-coding` loads both.
+`--plugin-dir` loads the plugin from disk for **that session only**, which makes it the right tool for dogfooding an unreleased working copy. It is repeatable, so `--plugin-dir /path/to/go-coding-plugin --plugin-dir /path/to/pgsql-coding-plugin` loads both.
 
 ### Inspect / update
 

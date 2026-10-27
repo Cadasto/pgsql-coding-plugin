@@ -7,6 +7,6 @@
     "url": "https://github.com/Cadasto"
   },
   "license": "MIT",
-  "repository": "https://github.com/Cadasto/pgsql-coding",
+  "repository": "https://github.com/Cadasto/pgsql-coding-plugin",
   "keywords": ["postgresql", "sql", "jsonb", "indexing", "query-optimization", "migrations", "coding-standards"]
 }

@@ -14,7 +14,7 @@ While on the `0.x` line, treat the plugin as pre-stable: a breaking change may s
 
 1. Bump `version` in **both** manifests (they must agree): `.claude-plugin/plugin.json` and `.cursor-plugin/plugin.json`. Keep `description`, `author`, `license`, `repository` and `keywords` identical across both; `scripts/validate.py` enforces this parity.
 2. Run `./scripts/validate.sh`, `python3 scripts/validate.py --selftest`, `./scripts/hooks-test.sh`, `python3 scripts/validate.py --check-links`, and `claude plugin validate .`.
-3. **Dogfood:** load the working copy (`claude --plugin-dir /path/to/pgsql-coding`) and exercise the components against a real SQL change on **both** hosts; see [testing.md](testing.md).
+3. **Dogfood:** load the working copy (`claude --plugin-dir /path/to/pgsql-coding-plugin`) and exercise the components against a real SQL change on **both** hosts; see [testing.md](testing.md).
 4. Fold the accumulated `## [Unreleased]` notes into a dated `## [X.Y.Z] - YYYY-MM-DD` section in [CHANGELOG.md](../CHANGELOG.md) (Keep a Changelog groups in order: Added, Changed, Deprecated, Removed, Fixed, Security; see [AGENTS.md](../AGENTS.md#changelog-style)).
 5. Sync the docs surface (AGENTS.md, README.md, docs/testing.md) with what shipped, and the component list in the session-start banner (`hooks/session-start.sh`).
 6. Update the version badge in [README.md](../README.md) to `X.Y.Z`.
