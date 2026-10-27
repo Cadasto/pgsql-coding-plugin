@@ -19,6 +19,7 @@ Deterministic backstop: `go vet` and `golangci-lint`, owned by go-coding. Error 
 - **Reference arguments as `$1`, `$2`.** With `pgx.NamedArgs`, write `@name`. Names are case sensitive and start with a letter or underscore ([pgx](https://pkg.go.dev/github.com/jackc/pgx/v5), [named_args.go](https://github.com/jackc/pgx/blob/v5.11.0/named_args.go)).
 - **Prefer `pgx.StrictNamedArgs` over `pgx.NamedArgs`.** It checks that the query uses every argument given, and that every argument it uses is given ([pgx](https://pkg.go.dev/github.com/jackc/pgx/v5#StrictNamedArgs)).
 - **Do not run one query per row in a loop.** Fetch or write the set in one statement with `= ANY($1)` or `unnest` (see `writes.md`). When the statements differ, queue them in a `pgx.Batch`, which bundles queries "to avoid unnecessary network round trips" ([batch.go](https://github.com/jackc/pgx/blob/v5.11.0/batch.go)).
+- **Quote a dynamic identifier with `pgx.Identifier{"schema", "table"}.Sanitize()`.** It returns a string "safe for SQL interpolation". Take the name itself from an allowlist (SKILL.md) ([pgx](https://pkg.go.dev/github.com/jackc/pgx/v5#Identifier.Sanitize)).
 
 ## Reading rows
 

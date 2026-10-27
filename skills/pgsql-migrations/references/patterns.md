@@ -55,7 +55,7 @@ ALTER TABLE orders ADD CONSTRAINT orders_tenant_id_fkey
 ALTER TABLE orders VALIDATE CONSTRAINT orders_tenant_id_fkey;
 ```
 
-- squawk: `constraint-missing-not-valid`, `adding-foreign-key-constraint`. A row that already breaks a `NOT VALID` `CHECK` rejects any update that leaves it breaking; fix such rows before adding it to a live table.
+- **Both kinds go `NOT VALID` first and validate later** ([ALTER TABLE notes](https://www.postgresql.org/docs/18/sql-altertable.html#SQL-ALTERTABLE-NOTES)). squawk: `constraint-missing-not-valid`, `adding-foreign-key-constraint`. A row that already breaks a `NOT VALID` `CHECK` rejects any update that leaves it breaking; fix such rows before adding it to a live table.
 - **Build the index on the referencing column concurrently, before the foreign key.** Which index is `pgsql-indexing`.
 
 ### Add a unique constraint or primary key

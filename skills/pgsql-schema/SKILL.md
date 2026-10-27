@@ -7,7 +7,7 @@ description: This skill should be used when a task designs or reviews PostgreSQL
 
 Scope: what a `CREATE TABLE`, `CREATE FUNCTION`, `CREATE TRIGGER`, `CREATE POLICY` or `GRANT` should say on PostgreSQL 18.
 
-Deterministic backstop: `squawk` on migration files flags `serial` (`prefer-identity`), `int` keys (`prefer-bigint-over-int`), `varchar(n)` (`prefer-text-field`), `timestamp` (`prefer-timestamptz`) and `char(n)` (`ban-char-field`). `SELECT * FROM plpgsql_check_function('fn(int)')` from the plpgsql_check extension checks each PL/pgSQL function. Name the tool when it would catch the slip; the rules below are the ones that pass both.
+Deterministic backstop: `squawk` on migration files flags `serial` (`prefer-identity`), `int` keys (`prefer-bigint-over-int`), `varchar(n)` (`prefer-text-field`), `timestamp` (`prefer-timestamptz`) and `char(n)` (`ban-char-field`). `SELECT * FROM plpgsql_check_function('fn(int)', security_warnings => true)` from the plpgsql_check extension checks each PL/pgSQL function. Name the tool when it would catch the slip; the rules below are the ones that pass both.
 
 ## Rules
 

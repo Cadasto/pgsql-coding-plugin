@@ -18,6 +18,7 @@ Backstop: `EXPLAIN (ANALYZE, BUFFERS)` after `ANALYZE` shows `Index Cond`, `Inde
 
 ## Column order and skip scan
 
+- **Put equality columns first, then one range or sort column** (SKILL.md).
 - **Skip scan helps only a low-cardinality leading column.** PostgreSQL 18 can probe each distinct value of a leading column that has no condition, but "if there are many distinct `x` values, then the entire index will have to be scanned", and the planner then prefers a sequential scan ([multicolumn indexes](https://www.postgresql.org/docs/18/indexes-multicolumn.html), [release notes](https://www.postgresql.org/docs/18/release-18.html)). The `Index Searches` line of `EXPLAIN ANALYZE` counts the probes ([using EXPLAIN](https://www.postgresql.org/docs/18/using-explain.html)). A query that filters only on a high-cardinality column still needs an index that leads with it.
 - **Prefer one to three key columns.** Most cases need one; more than three rarely helps ([multicolumn indexes](https://www.postgresql.org/docs/18/indexes-multicolumn.html)). For GIN and BRIN the column order does not matter; for GiST the first column decides most of the scan ([multicolumn indexes](https://www.postgresql.org/docs/18/indexes-multicolumn.html)).
 
@@ -69,6 +70,7 @@ Backstop: `EXPLAIN (ANALYZE, BUFFERS)` after `ANALYZE` shows `Index Cond`, `Inde
 
 ## Uniqueness and NULLs
 
+- **A unique index accepts many NULLs** unless declared `NULLS NOT DISTINCT` (`pgsql-schema`, `constraints.md`).
 - **A partial unique index enforces a rule on a subset**, for example one active subscription per account ([partial indexes](https://www.postgresql.org/docs/18/indexes-partial.html)).
 
   ```sql
@@ -77,6 +79,7 @@ Backstop: `EXPLAIN (ANALYZE, BUFFERS)` after `ANALYZE` shows `Index Cond`, `Inde
 
 ## Foreign keys
 
+- **Index the referencing columns of every foreign key** (SKILL.md).
 - **The referenced side is always indexed.** A foreign key must point at a primary key, unique constraint or non-partial unique index ([constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)); `maintenance.md` lists referencing columns without an index.
 
 ## Write cost, HOT and fillfactor
