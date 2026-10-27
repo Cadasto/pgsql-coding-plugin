@@ -40,7 +40,7 @@ END;
 
 - **Label each function with the strictest true volatility.** `VOLATILE` is the default and is re-evaluated for every row. `STABLE` returns the same result within one statement and may be used in an index scan condition. `IMMUTABLE` returns the same result forever and can be folded to a constant at plan time ([volatility](https://www.postgresql.org/docs/18/xfunc-volatility.html)).
 - **Anything that reads a setting is not IMMUTABLE.** A function whose result depends on `TimeZone` is STABLE; a false IMMUTABLE label can freeze a stale value into a prepared statement or a cached PL/pgSQL plan ([volatility](https://www.postgresql.org/docs/18/xfunc-volatility.html)).
-- **Index expressions and partial-index predicates accept only IMMUTABLE functions** ([CREATE INDEX](https://www.postgresql.org/docs/18/sql-createindex.html)). Do not relabel a STABLE function to get an index; index the underlying columns instead (`pgsql-indexing`).
+- **Never relabel a STABLE function IMMUTABLE to get an index**; the index rule is `pgsql-indexing`'s.
 - **STABLE and IMMUTABLE functions see the snapshot of the calling query** and may only run `SELECT`; a `VOLATILE` function sees changes made by the calling statement ([volatility](https://www.postgresql.org/docs/18/xfunc-volatility.html)).
 - **`STRICT` skips the call on any null argument** and returns null ([CREATE FUNCTION](https://www.postgresql.org/docs/18/sql-createfunction.html)). Use it when null in means null out.
 - **`PARALLEL UNSAFE` is the default and forces a serial plan for the whole statement.** Mark a read-only function `PARALLEL SAFE` so a query that calls it can still use parallel workers; "if in doubt", leave it UNSAFE ([CREATE FUNCTION](https://www.postgresql.org/docs/18/sql-createfunction.html)).
@@ -106,7 +106,6 @@ CREATE TRIGGER account_balance_audit
 
 - CREATE FUNCTION (SQL bodies, STRICT, PARALLEL, LEAKPROOF, SECURITY DEFINER): <https://www.postgresql.org/docs/18/sql-createfunction.html> (checked 2026-10-27)
 - Function volatility categories: <https://www.postgresql.org/docs/18/xfunc-volatility.html> (checked 2026-10-27)
-- CREATE INDEX, immutability of index expressions: <https://www.postgresql.org/docs/18/sql-createindex.html> (checked 2026-10-27)
 - PL/pgSQL basic statements, dynamic commands: <https://www.postgresql.org/docs/18/plpgsql-statements.html> (checked 2026-10-27)
 - CREATE TRIGGER: <https://www.postgresql.org/docs/18/sql-createtrigger.html> (checked 2026-10-27)
 - Privileges, PUBLIC defaults: <https://www.postgresql.org/docs/18/ddl-priv.html> (checked 2026-10-27)

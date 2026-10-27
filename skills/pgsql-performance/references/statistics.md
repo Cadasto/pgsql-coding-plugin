@@ -10,7 +10,6 @@ Backstop: the `rows=` estimate against the actual rows in `EXPLAIN (ANALYZE, BUF
 - Reading pg_stats
 - Per-column targets and overrides
 - Correlated columns and expressions
-- What not to do
 - Newer in PostgreSQL 19 (hints)
 - Sources
 
@@ -84,11 +83,6 @@ ANALYZE events;
 
 - **Confirm with the plan.** Re-run `EXPLAIN (ANALYZE, BUFFERS)` and check the estimate moved toward the actual rows; the manual's examples do exactly this ([CREATE STATISTICS](https://www.postgresql.org/docs/18/sql-createstatistics.html)).
 
-## What not to do
-
-- **Do not fix an estimate with `enable_*` settings.** They are "a crude method" and a "temporary solution"; the better ways are cost constants, `ANALYZE`, a higher statistics target, and `SET STATISTICS` on specific columns ([Query Planning settings](https://www.postgresql.org/docs/18/runtime-config-query.html)).
-- **Do not raise `default_statistics_target` server-wide for one column's skew.** Every `ANALYZE` of every table pays for it ([Query Planning settings](https://www.postgresql.org/docs/18/runtime-config-query.html)).
-
 ## Newer in PostgreSQL 19 (hints)
 
 Release candidate only ([release notes 19](https://www.postgresql.org/docs/19/release-19.html)):
@@ -102,7 +96,7 @@ Release candidate only ([release notes 19](https://www.postgresql.org/docs/19/re
 - CREATE STATISTICS: <https://www.postgresql.org/docs/18/sql-createstatistics.html> (checked 2026-10-27)
 - ALTER TABLE, `SET STATISTICS`, `n_distinct`: <https://www.postgresql.org/docs/18/sql-altertable.html> (checked 2026-10-27)
 - pg_stats view: <https://www.postgresql.org/docs/18/view-pg-stats.html> (checked 2026-10-27)
-- Query Planning settings, `default_statistics_target`, planner method configuration: <https://www.postgresql.org/docs/18/runtime-config-query.html> (checked 2026-10-27)
+- Query Planning settings, `default_statistics_target`: <https://www.postgresql.org/docs/18/runtime-config-query.html> (checked 2026-10-27)
 - Vacuuming settings, autovacuum thresholds: <https://www.postgresql.org/docs/18/runtime-config-vacuum.html> (checked 2026-10-27)
 - Routine Vacuuming, temporary and partitioned tables: <https://www.postgresql.org/docs/18/routine-vacuuming.html> (checked 2026-10-27)
 - Cumulative Statistics, `pg_stat_all_tables`: <https://www.postgresql.org/docs/18/monitoring-stats.html> (checked 2026-10-27)

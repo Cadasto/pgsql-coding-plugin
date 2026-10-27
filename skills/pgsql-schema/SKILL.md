@@ -1,13 +1,13 @@
 ---
 name: pgsql-schema
-description: This skill should be used when a task designs or reviews PostgreSQL tables and the objects around them, such as CREATE TABLE, a column type (identity or serial, uuid or uuidv7, text or varchar, timestamptz, numeric for money, enum, domain, array, range or multirange), a constraint (NOT NULL, CHECK, UNIQUE NULLS NOT DISTINCT, PRIMARY KEY, FOREIGN KEY with ON DELETE, EXCLUDE, WITHOUT OVERLAPS, PERIOD, NOT ENFORCED, DEFERRABLE), a generated column (STORED or VIRTUAL), declarative partitioning, CREATE FUNCTION or PL/pgSQL (volatility, STRICT, SECURITY DEFINER, search_path, EXECUTE format), a trigger, GRANT and roles, the public schema, row-level security policies, or a view with security_invoker. PostgreSQL 18 floor. Not for altering a live table safely (`pgsql-migrations`), jsonb columns (`pgsql-jsonb`), choosing an index (`pgsql-indexing`), or query text (`pgsql-query`).
+description: This skill should be used when a task designs or reviews PostgreSQL tables and the objects around them, for example "design these tables", "which type for money or ids", "should status be an enum", "cascade the delete", "add row-level security per tenant". Covers CREATE TABLE, column types (identity or serial, uuid or uuidv7, text or varchar, timestamptz, numeric for money, enum, domain, array, range or multirange), constraints (NOT NULL, CHECK, UNIQUE NULLS NOT DISTINCT, PRIMARY KEY, FOREIGN KEY with ON DELETE, EXCLUDE, WITHOUT OVERLAPS, PERIOD, NOT ENFORCED, DEFERRABLE), STORED or VIRTUAL generated columns, partitioning, CREATE FUNCTION and PL/pgSQL (volatility, STRICT, SECURITY DEFINER, search_path, EXECUTE format), triggers, GRANT and roles, the public schema, row-level security policies, and views with security_invoker. Not for live-table changes (pgsql-migrations), jsonb columns (pgsql-jsonb), choosing an index (pgsql-indexing), or query text (pgsql-query).
 ---
 
 # pgsql-schema: tables, types, constraints and database objects
 
 Scope: what a `CREATE TABLE`, `CREATE FUNCTION`, `CREATE TRIGGER`, `CREATE POLICY` or `GRANT` should say on PostgreSQL 18.
 
-Deterministic backstop: `squawk` on migration files flags `serial` (`prefer-identity`), `int` keys (`prefer-bigint-over-int`), `varchar(n)` (`prefer-text-field`), `timestamp` (`prefer-timestamptz`) and `char(n)` (`ban-char-field`). `SELECT * FROM plpgsql_check_function('fn(int)')` from the plpgsql_check extension checks each PL/pgSQL function. Name the tool when it would catch the slip; the rules below are the ones that pass both.
+Deterministic backstop: `squawk` on migration files flags `serial` (`prefer-identity`), `int` keys (`prefer-bigint-over-int`), `varchar(n)` (`prefer-text-field`), `timestamp` (`prefer-timestamptz`) and `char(n)` (`ban-char-field`). `SELECT * FROM plpgsql_check_function('fn(int)', security_warnings => true)` from the plpgsql_check extension checks each PL/pgSQL function. Name the tool when it would catch the slip; the rules below are the ones that pass both.
 
 ## Rules
 

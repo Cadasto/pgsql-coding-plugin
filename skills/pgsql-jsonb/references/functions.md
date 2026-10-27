@@ -19,13 +19,13 @@ Deterministic backstop: none. Run the expression in `psql` against PostgreSQL 18
 
 - **`->` returns jsonb, `->>` returns text.** Both return SQL NULL when the key or element is missing, "rather than failing" ([JSON operators](https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-OP-TABLE)). `#>` and `#>>` take a `text[]` path. Array indexes start at zero; a negative index counts from the end.
 - **Compare jsonb with jsonb.** Subscripting and `->` return jsonb, so the literal must be a JSON value: `doc['status'] = '"open"'`, not `= 'open'` ([jsonb subscripting](https://www.postgresql.org/docs/18/datatype-json.html#JSONB-SUBSCRIPTING)). To compare with text, use `->>`.
-- **Cast numbers from text, not from a JSON string.** `(doc -> 'n')::int` works for a JSON number but raises `cannot cast jsonb string to type integer` when the value is `"5"`; `(doc ->> 'n')::int` works for both (checked on 18.6). Since 18, a JSON `null` casts to SQL NULL instead of raising ([release notes 18](https://www.postgresql.org/docs/18/release-18.html)).
+- **Cast numbers from text, not from a JSON string.** `(doc -> 'n')::int` works for a JSON number but raises `cannot cast jsonb string to type integer` when the value is `"5"`; `(doc ->> 'n')::int` works for both (checked). Since 18, a JSON `null` casts to SQL NULL instead of raising ([release notes 18](https://www.postgresql.org/docs/18/release-18.html)).
 - **`@>` is structural.** The right side must match structure and data, array order does not matter, and nesting must line up: `'{"a":{"b":1}}' @> '{"b":1}'` is false ([containment](https://www.postgresql.org/docs/18/datatype-json.html#JSON-CONTAINMENT)).
 - **`?`, `?|` and `?&` look at the top level only.** They match an object key or a string array element, never a value and never a nested key: `'{"a":{"b":1}}' ? 'b'` is false ([containment and existence](https://www.postgresql.org/docs/18/datatype-json.html#JSON-CONTAINMENT)).
 
 ## SQL NULL versus JSON null
 
-- **Two nulls exist.** `'{"a":null}'::jsonb -> 'a'` is the JSON value `null` (not SQL NULL); `->> 'a'` is SQL NULL, the same as for a missing key (checked on 18.6). `jsonb_typeof` returns the text `'null'` for a JSON null and SQL NULL for SQL NULL input ([processing functions](https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-PROCESSING-TABLE)). Test presence with `?` and the value with `->>`, not one with the other.
+- **Two nulls exist.** `'{"a":null}'::jsonb -> 'a'` is the JSON value `null` (not SQL NULL); `->> 'a'` is SQL NULL, the same as for a missing key (checked). `jsonb_typeof` returns the text `'null'` for a JSON null and SQL NULL for SQL NULL input ([processing functions](https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-PROCESSING-TABLE)). Test presence with `?` and the value with `->>`, not one with the other.
 - **`jsonb_set` with an SQL NULL value returns NULL for the whole document.** An `UPDATE ... SET doc = jsonb_set(doc, '{k}', to_jsonb($1))` with a NULL parameter wipes the column. Use `jsonb_set_lax`, whose default `null_value_treatment` is `'use_json_null'`; the other choices are `'raise_exception'`, `'delete_key'` and `'return_target'` ([processing functions](https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-PROCESSING-TABLE)).
 
 ## Modifying documents
@@ -37,9 +37,9 @@ Deterministic backstop: none. Run the expression in `psql` against PostgreSQL 18
 
 ## Building JSON and aggregating
 
-- **Wrap `jsonb_agg` and `JSON_ARRAYAGG` for an empty input.** Over zero rows they give SQL NULL, not `[]`, as `pgsql-query` says of every aggregate but `count` ([aggregate functions](https://www.postgresql.org/docs/18/functions-aggregate.html)): `COALESCE(jsonb_agg(x ORDER BY x), '[]')`.
+- **Wrap `JSON_ARRAYAGG` in `COALESCE` too.** Over zero rows it gives SQL NULL, not `[]`, like `jsonb_agg` (SKILL.md) and every aggregate but `count` ([aggregate functions](https://www.postgresql.org/docs/18/functions-aggregate.html)).
 - **Order is unspecified unless stated.** Put `ORDER BY` inside the aggregate call for `jsonb_agg` and `jsonb_object_agg` ([aggregate functions](https://www.postgresql.org/docs/18/functions-aggregate.html)); filter with `FILTER (WHERE ...)`.
-- **The NULL defaults differ by function** (checked on 18.6): `json_array(...)` and `JSON_ARRAYAGG` drop NULLs (ABSENT ON NULL); `json_object(...)` and `JSON_OBJECTAGG` keep them (NULL ON NULL); `jsonb_agg` keeps them. State `ABSENT ON NULL` or `NULL ON NULL`, or use `jsonb_agg_strict`, so the reader does not have to know.
+- **The NULL defaults differ by function** (checked): `json_array(...)` and `JSON_ARRAYAGG` drop NULLs (ABSENT ON NULL); `json_object(...)` and `JSON_OBJECTAGG` keep them (NULL ON NULL); `jsonb_agg` keeps them. State `ABSENT ON NULL` or `NULL ON NULL`, or use `jsonb_agg_strict`, so the reader does not have to know.
 - **Duplicate keys.** `jsonb_object_agg` keeps the last value for a repeated key; `jsonb_object_agg_unique` raises an error; the `_strict` forms skip NULL values ([aggregate functions](https://www.postgresql.org/docs/18/functions-aggregate.html)).
 - **`JSON_OBJECT` and `JSON_ARRAY` return `json` unless told.** Add `RETURNING jsonb` when the result is stored or compared ([JSON creation functions](https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-CREATION-TABLE)).
 
@@ -61,7 +61,7 @@ CROSS JOIN LATERAL jsonb_to_recordset(o.doc -> 'items') AS i(sku text, qty int);
 - **`JSON_VALUE` is for one scalar.** It returns text by default, removes the quotes from a string, and treats an object, array or several items as an error, which by default becomes NULL. Use `JSON_QUERY` for objects and arrays; add `WITH CONDITIONAL WRAPPER` when the path may return several items ([SQL/JSON query functions](https://www.postgresql.org/docs/18/functions-json.html#SQLJSON-QUERY-FUNCTIONS)).
 - **Use `RETURNING` to type the value.** `JSON_VALUE(doc, '$.amount' RETURNING numeric)` instead of a cast on text ([SQL/JSON query functions](https://www.postgresql.org/docs/18/functions-json.html#SQLJSON-QUERY-FUNCTIONS)).
 - **Pass values with `PASSING`.** `JSON_EXISTS(doc, '$.tags[*] ? (@ == $t)' PASSING $1 AS t)` binds the value; never build the path from strings ([SQL/JSON query functions](https://www.postgresql.org/docs/18/functions-json.html#SQLJSON-QUERY-FUNCTIONS)).
-- **`JSON_TABLE` returns zero rows on error by default.** A structural error in strict mode yields an empty table unless `ERROR ON ERROR` is written (checked on 18.6). Number rows with `FOR ORDINALITY`; unnest child arrays with `NESTED PATH`; a column without `PATH` reads `$.column_name` ([JSON_TABLE](https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-SQLJSON-TABLE)).
+- **`JSON_TABLE` returns zero rows on error by default.** A structural error in strict mode yields an empty table unless `ERROR ON ERROR` is written (checked). Number rows with `FOR ORDINALITY`; unnest child arrays with `NESTED PATH`; a column without `PATH` reads `$.column_name` ([JSON_TABLE](https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-SQLJSON-TABLE)).
 
 ```sql
 SELECT jt.*
@@ -98,4 +98,4 @@ PostgreSQL 19 is a release candidate; these are not rules until a project runs i
 - Release notes 17 (SQL/JSON functions): <https://www.postgresql.org/docs/17/release-17.html> (checked 2026-10-27)
 - Release notes 18 (jsonb null casts, `strip_in_arrays`): <https://www.postgresql.org/docs/18/release-18.html> (checked 2026-10-27)
 - Release notes 19, as of 2026-10-09: <https://www.postgresql.org/docs/19/release-19.html> (checked 2026-10-27)
-- Behaviour marked "checked on 18.6" was run on PostgreSQL 18.6 (2026-10-27).
+- Behaviour marked "checked" was run on PostgreSQL 18.6 (2026-10-27).

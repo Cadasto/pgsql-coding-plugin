@@ -2,7 +2,7 @@
 
 Read when: a `CREATE TABLE` or `ADD COLUMN` picks a key, a UUID, a string, a time, money, an enum, a domain, an array, a range or multirange, or a generated column.
 
-Backstop: in migration files squawk flags `serial` (`prefer-identity`), `int` keys (`prefer-bigint-over-int`), `varchar(n)` (`prefer-text-field`), `timestamp` (`prefer-timestamptz`) and `char(n)` (`ban-char-field`). Everything else here passes squawk.
+Backstop: the squawk rules listed in SKILL.md; everything else here passes squawk.
 
 ## Contents
 
@@ -54,7 +54,6 @@ country_code text NOT NULL CHECK (country_code ~ '^[A-Z]{2}$')
 - **`timestamptz` for a moment.** Input is converted to UTC, input without a zone uses the session `TimeZone`, and output is converted back to that zone ([date/time types](https://www.postgresql.org/docs/18/datatype-datetime.html)).
 - **Plain `timestamp` is a calendar and a clock, not a moment.** Arithmetic across zones and daylight-saving changes goes wrong on it ([Don't Do This](https://wiki.postgresql.org/wiki/Don%27t_Do_This)).
 - **No `timetz`.** The manual does not recommend it ([date/time types](https://www.postgresql.org/docs/18/datatype-datetime.html)).
-- **Type literals explicitly.** `TIMESTAMP '2004-10-19 10:23:54+02'` is read as `timestamp without time zone`; write `TIMESTAMPTZ '...'` ([date/time types](https://www.postgresql.org/docs/18/datatype-datetime.html)).
 - **No precision 0.** `timestamptz(0)` rounds rather than truncates ([Don't Do This](https://wiki.postgresql.org/wiki/Don%27t_Do_This)).
 
 ### Numbers and money
@@ -80,10 +79,9 @@ currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$')
 
 ### Generated columns
 
-- **Write `STORED` or `VIRTUAL`.** VIRTUAL is the default and is computed on read; STORED is computed on write ([generated columns](https://www.postgresql.org/docs/18/ddl-generated-columns.html)).
+- **VIRTUAL is computed on read, STORED on write** ([generated columns](https://www.postgresql.org/docs/18/ddl-generated-columns.html)).
 - **The expression is immutable and row-local.** No subqueries, no other generated column, no default or identity, and never a partition key column ([generated columns](https://www.postgresql.org/docs/18/ddl-generated-columns.html)).
 - **A virtual column uses built-in functions and types only.** No user-defined type or function, directly or through an operator or cast ([generated columns](https://www.postgresql.org/docs/18/ddl-generated-columns.html)).
-- **A virtual column cannot be indexed.** PostgreSQL 18 rejects indexes, primary keys and unique constraints on it ([indexcmds.c](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/commands/indexcmds.c)), and it never has statistics ([ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html)).
 - **Choose STORED when a query filters or sorts on the value, it needs an index, or it must replicate.** This includes a scalar extracted from a jsonb document. Only stored generated columns replicate logically ([generated columns](https://www.postgresql.org/docs/18/ddl-generated-columns.html)). Adding a VIRTUAL column never rewrites the table ([ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html)). An expression index on the source columns is the other route (`pgsql-indexing`).
 
 ```sql
@@ -106,7 +104,6 @@ Not rules until PostgreSQL 19 is released ([PostgreSQL 19 release notes](https:/
 - UUID functions: <https://www.postgresql.org/docs/18/functions-uuid.html> (checked 2026-10-27)
 - CREATE DOMAIN: <https://www.postgresql.org/docs/18/sql-createdomain.html> (checked 2026-10-27)
 - Generated columns: <https://www.postgresql.org/docs/18/ddl-generated-columns.html>; ALTER TABLE: <https://www.postgresql.org/docs/18/sql-altertable.html> (checked 2026-10-27)
-- Virtual column index errors, `indexcmds.c` on `REL_18_STABLE`: <https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/commands/indexcmds.c> (checked 2026-10-27)
 - PostgreSQL 18 release announcement: <https://www.postgresql.org/about/news/postgresql-18-released-3142/> (checked 2026-10-27)
 - PostgreSQL wiki, Don't Do This: <https://wiki.postgresql.org/wiki/Don%27t_Do_This> (checked 2026-10-27)
 - PostgreSQL 19 release notes, as of 2026-10-09: <https://www.postgresql.org/docs/19/release-19.html> (checked 2026-10-27)

@@ -19,7 +19,7 @@ Backstop: `EXPLAIN (ANALYZE, BUFFERS)` before and after; a test that proves the 
 ## NOT IN with a subquery
 
 - **Evidence:** `Filter: (NOT (ANY (... (hashed SubPlan 1) ...)))` or a plain `SubPlan` under a filter ([Using EXPLAIN](https://www.postgresql.org/docs/18/using-explain.html)); or rows silently missing.
-- **Why:** if the subquery yields any NULL and no match, `NOT IN` is NULL, not true, so the row is dropped ([Subquery Expressions](https://www.postgresql.org/docs/18/functions-subquery.html)). The planner "can't transform it into an anti-join"; the hashed form is allowed only for small results, and the plain form is O(N²), so a fast test can turn slow "once a size threshold is crossed" ([Don't Do This](https://wiki.postgresql.org/wiki/Don%27t_Do_This)).
+- **Why:** the planner "can't transform it into an anti-join"; the hashed form is allowed only for small results, and the plain form is O(N²), so a fast test can turn slow "once a size threshold is crossed" ([Don't Do This](https://wiki.postgresql.org/wiki/Don%27t_Do_This)). The NULL trap is `pgsql-query`'s rule.
 - **Rewrite:** `NOT EXISTS`. A literal `NOT IN (1, 2, 3)` list with no NULL is fine.
 
 ```sql
@@ -32,7 +32,7 @@ WHERE NOT EXISTS (SELECT 1 FROM orders AS o WHERE o.customer_id = c.id);
 - **Evidence:** a `Seq Scan` with `Filter: (lower(email) = ...)`, `Filter: (date(created_at) = ...)` or `Filter: ((id)::numeric = ...)` although an index on the column exists.
 - **Why:** a B-tree is considered "whenever an indexed column is involved in a comparison" with `<`, `<=`, `=`, `>=` or `>` ([Index Types](https://www.postgresql.org/docs/18/indexes-types.html)). A function or cast applied to the column makes the comparison one on an expression, which only an index on that same expression serves ([Indexes on Expressions](https://www.postgresql.org/docs/18/indexes-expressional.html)).
 - **Rewrite:** move the work to the constant side. Turn a date match into a half-open range whose bounds are computed in a named zone, or passed as two `timestamptz` parameters from the application; bind parameters with the column's own type so no cast lands on the column (driver details in `pgsql-query`). When the expression is the real requirement (`lower(email)`), add an expression index through `pgsql-indexing` instead.
-- **Name the zone.** `created_at::date` and a bare `$1::date` bound both take the day from the session `TimeZone`; a date compared with a timestamp "is assumed to represent midnight in the `TimeZone` zone" ([Date/Time Functions](https://www.postgresql.org/docs/18/functions-datetime.html)). `timestamp AT TIME ZONE 'zone'` returns the `timestamptz` of that local time in the named zone ([AT TIME ZONE](https://www.postgresql.org/docs/18/functions-datetime.html#FUNCTIONS-DATETIME-ZONECONVERT)), so the bounds no longer depend on the session. Tested on 18.6: the same row matched under the `UTC`, `Europe/Amsterdam` and `America/New_York` session zones.
+- **Name the zone.** `created_at::date` and a bare `$1::date` bound both take the day from the session `TimeZone`; a date compared with a timestamp "is assumed to represent midnight in the `TimeZone` zone" ([Date/Time Functions](https://www.postgresql.org/docs/18/functions-datetime.html)). `timestamp AT TIME ZONE 'zone'` returns the `timestamptz` of that local time in the named zone ([AT TIME ZONE](https://www.postgresql.org/docs/18/functions-datetime.html#FUNCTIONS-DATETIME-ZONECONVERT)), so the bounds no longer depend on the session. The same row matched under the `UTC`, `Europe/Amsterdam` and `America/New_York` session zones (checked).
 
 ```sql
 -- before: WHERE created_at::date = $1
@@ -43,8 +43,8 @@ WHERE created_at >= ($1::date)::timestamp AT TIME ZONE 'Europe/Amsterdam'
 ## OFFSET paging
 
 - **Evidence:** page latency grows with the page number; the plan reads `OFFSET + LIMIT` rows and discards most of them.
-- **Why:** "the rows skipped by an `OFFSET` clause still have to be computed inside the server" ([LIMIT and OFFSET](https://www.postgresql.org/docs/18/queries-limit.html)). Offsets also skip or repeat rows when data changes between pages (Markus Winand, [No Offset](https://use-the-index-luke.com/no-offset)).
-- **Rewrite:** keyset paging with a row comparison on a unique sort key, backed by an index on the same columns in the same order. Row comparisons with `<` and `>` compare left to right ([Row Constructor Comparison](https://www.postgresql.org/docs/18/functions-comparisons.html)), and PostgreSQL uses the index for them (Markus Winand, [Fetch the next page](https://use-the-index-luke.com/sql/partial-results/fetch-next-page)). It cannot jump to page N; offer "next" and "previous".
+- **Why:** offsets skip or repeat rows when data changes between pages (Markus Winand, [No Offset](https://use-the-index-luke.com/no-offset)).
+- **Rewrite:** keyset paging with a row comparison on a unique sort key, backed by an index on the same columns in the same order; PostgreSQL uses the index for row comparisons (Markus Winand, [Fetch the next page](https://use-the-index-luke.com/sql/partial-results/fetch-next-page)). It cannot jump to page N; offer "next" and "previous".
 
 ```sql
 SELECT id, created_at, total FROM orders
@@ -90,16 +90,14 @@ Release candidate only ([release notes 19](https://www.postgresql.org/docs/19/re
 ## Sources
 
 - Using EXPLAIN: <https://www.postgresql.org/docs/18/using-explain.html> (checked 2026-10-27)
-- Subquery Expressions, `NOT IN`, `EXISTS`: <https://www.postgresql.org/docs/18/functions-subquery.html> (checked 2026-10-27)
 - PostgreSQL wiki, Don't Do This, "Don't use NOT IN": <https://wiki.postgresql.org/wiki/Don%27t_Do_This> (checked 2026-10-27)
 - Index Types: <https://www.postgresql.org/docs/18/indexes-types.html> (checked 2026-10-27)
 - Indexes on Expressions: <https://www.postgresql.org/docs/18/indexes-expressional.html> (checked 2026-10-27)
 - Date/Time Functions, AT TIME ZONE: <https://www.postgresql.org/docs/18/functions-datetime.html> (checked 2026-10-27)
-- LIMIT and OFFSET: <https://www.postgresql.org/docs/18/queries-limit.html> (checked 2026-10-27)
-- Row Constructor Comparison: <https://www.postgresql.org/docs/18/functions-comparisons.html> (checked 2026-10-27)
 - Markus Winand, No Offset: <https://use-the-index-luke.com/no-offset>; Fetch the next page: <https://use-the-index-luke.com/sql/partial-results/fetch-next-page> (checked 2026-10-27)
 - PostgreSQL wiki, Count estimate: <https://wiki.postgresql.org/wiki/Count_estimate> (checked 2026-10-27)
 - Combining Multiple Indexes: <https://www.postgresql.org/docs/18/indexes-bitmap-scans.html> (checked 2026-10-27)
 - WITH Queries, CTE materialization: <https://www.postgresql.org/docs/18/queries-with.html> (checked 2026-10-27)
 - PostgreSQL 18 release notes: <https://www.postgresql.org/docs/18/release-18.html> (checked 2026-10-27)
 - PostgreSQL 19 release notes, as of 2026-10-09: <https://www.postgresql.org/docs/19/release-19.html> (checked 2026-10-27)
+- Behaviour marked "checked" was run on PostgreSQL 18.6 (2026-10-27).

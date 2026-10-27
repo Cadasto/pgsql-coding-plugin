@@ -27,7 +27,7 @@ Backstop: `squawk` flags the unsafe form of each recipe; the rule id is named pe
 ALTER TABLE orders ADD COLUMN is_gift boolean NOT NULL DEFAULT false;
 ```
 
-- **A volatile default (such as `clock_timestamp()`), a stored generated column, an identity column or a domain with constraints rewrites the table and its indexes** ([ALTER TABLE notes](https://www.postgresql.org/docs/18/sql-altertable.html#SQL-ALTERTABLE-NOTES)). Add the column nullable, `SET DEFAULT` for new rows, backfill, then make it NOT NULL as below. squawk: `adding-field-with-default`.
+- **When the new column would rewrite the table** (which kinds do, and the source: SKILL.md), add it nullable, `SET DEFAULT` for new rows, backfill, then make it NOT NULL as below. squawk: `adding-field-with-default`.
 - **A `NOT NULL` column without a default fails on a populated table** and breaks older code that inserts without it. squawk: `adding-required-field`.
 
 ### Make an existing column NOT NULL
@@ -44,7 +44,6 @@ ALTER TABLE orders VALIDATE CONSTRAINT orders_tenant_id_not_null;
 - **Add the constraint only after the backfill.** A `NOT VALID` constraint is still applied to subsequent inserts and updates ([ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html#SQL-ALTERTABLE-DESC-ADD-TABLE-CONSTRAINT)). Added earlier, it rejects every update of a row still NULL, even one that leaves the column alone, and every insert that omits the column.
 - **PG 18 allows `NOT VALID` on not-null constraints,** and `VALIDATE CONSTRAINT` validates them ([release notes 18](https://www.postgresql.org/docs/18/release-18.html), [ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html#SQL-ALTERTABLE-DESC-VALIDATE-CONSTRAINT)).
 - **The older route, in the same order:** code writes the column, backfill, then `CHECK (tenant_id IS NOT NULL) NOT VALID`, `VALIDATE CONSTRAINT`, then `SET NOT NULL`, which skips its scan because a valid `CHECK` proves no NULL exists; then drop the `CHECK` ([SET NOT NULL](https://www.postgresql.org/docs/18/sql-altertable.html#SQL-ALTERTABLE-DESC-SET-DROP-NOT-NULL)).
-- **A bare `SET NOT NULL` scans the whole table under `ACCESS EXCLUSIVE`.** squawk: `adding-not-nullable-field`.
 
 ### Add a CHECK or a foreign key
 
@@ -74,8 +73,8 @@ ALTER TABLE orders ADD CONSTRAINT orders_external_ref_key UNIQUE USING INDEX ord
 
 ### Create, drop or rebuild an index
 
-- **Create and drop with `CONCURRENTLY`, in a file that runs outside a transaction and sets `lock_timeout` and `statement_timeout` to 0** (`migration-tools.md`, `lock-levels.md`); a short `lock_timeout` aborts the build on a busy system. squawk: `require-concurrent-index-creation`, `require-concurrent-index-deletion`.
-- **After a failed build, drop the `INVALID` index before rerunning.** `IF NOT EXISTS` checks only the name, so it keeps the invalid leftover ([CREATE INDEX](https://www.postgresql.org/docs/18/sql-createindex.html)). `pg_index.indisvalid` is false for a possibly incomplete index ([`pg_index`](https://www.postgresql.org/docs/18/catalog-pg-index.html)):
+- **Create and drop with `CONCURRENTLY`** (file layout and timeouts: `migration-tools.md`, `lock-levels.md`). squawk: `require-concurrent-index-creation`, `require-concurrent-index-deletion`.
+- **After a failed build, drop the `INVALID` index before rerunning.** `IF NOT EXISTS` keeps it (SKILL.md). `pg_index.indisvalid` is false for a possibly incomplete index ([`pg_index`](https://www.postgresql.org/docs/18/catalog-pg-index.html)):
 
 ```sql
 SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;
@@ -101,7 +100,7 @@ ALTER INDEX events_created_at_idx ATTACH PARTITION events_2026_10_created_at_idx
 ### Rename or drop a column or table
 
 - **A rename breaks the application version still running.** Keep the database name and rename in code, or for a table: create a view under the new name, deploy, then drop the view and rename in one quick transaction ([squawk `renaming-table`](https://squawkhq.com/docs/renaming-table)). squawk: `renaming-column`, `renaming-table`.
-- **Drop only after the code that reads or writes it is gone.** `DROP COLUMN` is quick and frees space only as rows are rewritten ([ALTER TABLE notes](https://www.postgresql.org/docs/18/sql-altertable.html#SQL-ALTERTABLE-NOTES)). squawk: `ban-drop-column`, `ban-drop-table`.
+- **Drop only after the code that reads or writes it is gone.** squawk: `ban-drop-column`, `ban-drop-table`.
 
 ### Add an enum value
 
@@ -109,7 +108,7 @@ ALTER INDEX events_created_at_idx ATTACH PARTITION events_2026_10_created_at_idx
 ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'refunded' AFTER 'paid';
 ```
 
-- **Its own migration, deployed before code writes the value.** Inside a transaction block the new value is unusable until commit; enums have `ADD VALUE` and `RENAME VALUE`, no `DROP VALUE` ([ALTER TYPE](https://www.postgresql.org/docs/18/sql-altertype.html)). squawk: `require-enum-value-ordering`; opt-in `ban-add-enum-value`.
+- **Its own migration, deployed before code writes the value.** Enums also have `RENAME VALUE` ([ALTER TYPE](https://www.postgresql.org/docs/18/sql-altertype.html)). squawk: `require-enum-value-ordering`; opt-in `ban-add-enum-value`.
 
 ### Backfill in batches
 
@@ -123,7 +122,7 @@ WHERE c.id = o.customer_id
   AND o.tenant_id IS NULL;
 ```
 
-- **Advance `$1` and `$2` over primary-key ranges and commit between batches.** Each batch holds its row locks only until its own commit ([13.3.2](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)). One long transaction also stops vacuum from removing dead rows ([client settings](https://www.postgresql.org/docs/18/runtime-config-client.html#GUC-IDLE-IN-TRANSACTION-SESSION-TIMEOUT)). Source for batching: [squawk `adding-field-with-default`](https://squawkhq.com/docs/adding-field-with-default).
+- **Advance `$1` and `$2` over primary-key ranges and commit between batches.** One long transaction also stops vacuum from removing dead rows ([client settings](https://www.postgresql.org/docs/18/runtime-config-client.html#GUC-IDLE-IN-TRANSACTION-SESSION-TIMEOUT)).
 
 ### Detach a partition, rewrite a table
 

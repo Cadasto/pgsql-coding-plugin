@@ -1,13 +1,13 @@
 ---
 name: pgsql-migrations
-description: This skill should be used when a task writes or reviews a migration or DDL that runs against a live PostgreSQL 18 table, such as ALTER TABLE, ADD COLUMN, SET NOT NULL, ADD CONSTRAINT or a foreign key, CREATE INDEX, DROP INDEX or REINDEX on a populated or partitioned table, an INVALID index left by a failed concurrent build, a column type change, a rename or drop, ALTER TYPE ADD VALUE, a backfill, a goose or golang-migrate SQL file, lock_timeout or statement_timeout, a squawk finding, or a deploy whose migration hung or blocked traffic. It covers lock levels and the lock queue, table rewrites, NOT VALID then VALIDATE CONSTRAINT, CONCURRENTLY outside a transaction, expand and contract, and batched backfills. Not for the target design (`pgsql-schema`), which index to build (`pgsql-indexing`), lock waits outside a migration (`pgsql-performance`), or installing squawk (`pgsql-lint-setup`).
+description: This skill should be used when a task writes or reviews a migration or DDL that runs against a live PostgreSQL 18 table, such as ALTER TABLE, ADD COLUMN, SET NOT NULL, ADD CONSTRAINT or a foreign key, CREATE INDEX, DROP INDEX or REINDEX on a populated or partitioned table, an INVALID index left by a failed concurrent build, a column type change, a rename or drop, ALTER TYPE ADD VALUE, a backfill, a goose or golang-migrate SQL file, lock_timeout or statement_timeout, a squawk finding, a deploy whose migration hung or blocked traffic, or a question like "is this migration safe to run in production". It covers zero-downtime changes, lock levels and the lock queue, table rewrites, NOT VALID then VALIDATE CONSTRAINT, CONCURRENTLY outside a transaction, expand and contract, and batched backfills. Not for the target design (`pgsql-schema`), which index to build (`pgsql-indexing`), lock waits outside a migration (`pgsql-performance`), or installing squawk (`pgsql-lint-setup`).
 ---
 
 # pgsql-migrations: zero-downtime schema changes
 
 Scope: applying DDL to a PostgreSQL 18 table that live traffic reads and writes, so that no statement stalls that traffic or leaves the schema half-changed.
 
-Deterministic backstop: `squawk 'migrations/*.sql'` on every migration file, with the config from `/pgsql-lint-setup`; each finding names a rule id from the [squawk rules](https://squawkhq.com/docs/rules). A clean squawk run is not a safe run: the migration still needs a lock timeout and a retry ([squawk: applying migrations safely](https://squawkhq.com/docs/safe_migrations)).
+Deterministic backstop: `squawk 'migrations/*.sql'` on every migration file, with the config from `/pgsql-lint-setup`; each finding names a rule id from the [squawk rules](https://squawkhq.com/docs/rules). A clean squawk run is not a safe run: squawk cannot see whether the deploy retries the migration when its lock timeout fires ([squawk: applying migrations safely](https://squawkhq.com/docs/safe_migrations)).
 
 ## Rules
 
@@ -23,7 +23,7 @@ Deterministic backstop: `squawk 'migrations/*.sql'` on every migration file, wit
 - **Add an enum value in its own migration, before code writes it.** A value added inside a transaction block cannot be used until that transaction commits, and there is no `DROP VALUE` ([ALTER TYPE](https://www.postgresql.org/docs/18/sql-altertype.html)). Give `BEFORE` or `AFTER` when the order matters. squawk: `require-enum-value-ordering`.
 - **Match the migration tool's transaction handling.** goose runs a file in one transaction unless the file carries `-- +goose NO TRANSACTION` ([goose annotations](https://pressly.github.io/goose/documentation/annotations/)). golang-migrate sends a file as one `Exec`, which PostgreSQL runs as one implicit transaction ([golang-migrate postgres](https://github.com/golang-migrate/migrate/blob/master/database/postgres/README.md)). A file that runs outside a transaction must be safe to rerun. squawk: `prefer-robust-stmts`, `transaction-nesting`.
 
-Column types in new DDL (`prefer-identity`, `prefer-bigint-over-int`, `prefer-text-field`, `prefer-timestamptz`) belong to `pgsql-schema`. Which index to build belongs to `pgsql-indexing`; building it on a live table belongs here. Diagnosing lock waits in a running system belongs to `pgsql-performance`.
+Column types in new DDL (`prefer-identity`, `prefer-bigint-over-int`, `prefer-text-field`, `prefer-timestamptz`) belong to `pgsql-schema`.
 
 ## Read the reference
 
