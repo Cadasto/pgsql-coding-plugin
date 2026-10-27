@@ -16,8 +16,8 @@ claude plugin validate .                    # manifest and component structure (
 `scripts/validate.py` checks:
 
 - **Manifests**: both parse, carry `name`, `version`, `description` and an `author` object, agree on `name`, `version`, `description`, `author`, `license`, `repository` and `keywords`, and every declared path exists.
-- **Hooks**: both configs parse; every `hooks/*.sh` is wired for the equivalent event on both hosts (`SessionStart`/`sessionStart`, `PostToolUse`/`afterFileEdit`), exists, and is executable.
-- **Frontmatter**: `name` equals the directory or filename, descriptions fit 1,024 characters, no unquoted `: ` or ` #`, and agents declare `tools:`, never `allowed-tools:`.
+- **Hooks**: both configs exist and parse; every `hooks/*.sh` is wired for the equivalent event on both hosts (`SessionStart`/`sessionStart`, `PostToolUse`/`afterFileEdit`), exists, and is executable; Claude Code commands reach their script through `${CLAUDE_PLUGIN_ROOT}`, and Cursor commands never use it.
+- **Frontmatter**: `name` equals the directory or filename, descriptions fit 1,024 characters (a folded `>-` or literal `|` block measured whole), no unquoted `: ` or ` #`, and agents declare `tools:`, never `allowed-tools:`.
 - **Progressive disclosure**: every `skills/*/references/*.md` is linked from its `SKILL.md` and every link resolves; references carry no frontmatter, open with `## Contents` past 100 lines, stay under 200 lines, and end with `## Sources`. A `SKILL.md` body stays under 1,500 words.
 - **Routing surface**: the router, `rules/pgsql-context.mdc`, the session-start banner and `pgsql-reviewer` each name every focused skill.
 - **Doc inventories**: README.md, AGENTS.md and this page name every shipped skill, agent and hook; docs/install.md names every hook.
@@ -31,13 +31,13 @@ CI (`.github/workflows/validate.yml`) runs the validator, `--selftest`, the hook
 
 `scripts/hooks-test.sh` covers all three hooks with real host payload shapes:
 
-- `session-start`: detection by `go.mod` (pgx or lib/pq), `composer.json` (`ext-pdo_pgsql`), a compose file with a postgres image, or a `*.sql` file; silence elsewhere; the `/pgsql-lint-setup` hint only without a `.squawk.toml`.
-- `skill-nudge`: one skill per edit, chosen from the text the edit adds (not the deleted text or the tool response echo); once per skill per session; `additionalContext` JSON under Claude Code, a plain line under Cursor.
+- `session-start`: detection by `go.mod` (pgx or lib/pq), `composer.json` (`ext-pdo_pgsql`), a compose file with a postgres image, or a `*.sql` file; silence elsewhere; the `/pgsql-lint-setup` hint only without a `.squawk.toml`; exit 0.
+- `skill-nudge`: one skill per edit, chosen from the text the edit adds (not the deleted text or the tool response echo) in Claude Code's payload and in Cursor's documented `afterFileEdit` payload (`conversation_id`, `edits[]`); once per skill per session; `additionalContext` JSON under Claude Code, a plain line under Cursor.
 - `lint-on-save`: a stub `squawk` on PATH proves the findings reach the model as valid JSON with colour codes stripped, that nothing runs without a `.squawk.toml` or without squawk, and that the hook always exits 0.
 
 ## Plan summariser tests
 
-`scripts/plan-summary-test.py` runs `skills/pgsql-performance/scripts/plan-summary.py` on plans captured from `EXPLAIN (ANALYZE, BUFFERS)` on a `postgres:18` (18.6) container, in TEXT and JSON (`scripts/testdata/plans/`). It checks that the same query gives the same findings in both formats and in psql's aligned output, that an estimate error is reported where it starts and where it grows rather than at every ancestor, and that spills, loop counts, filter waste, JIT share and an estimates-only plan are recognised. To add a case, capture a new plan the same way and assert on its findings.
+`scripts/plan-summary-test.py` runs `skills/pgsql-performance/scripts/plan-summary.py` on plans captured from `EXPLAIN (ANALYZE, BUFFERS)` on a `postgres:18` (18.6) container, in TEXT and JSON (`scripts/testdata/plans/`). It checks that every plan captured in both formats gives the same node names and findings, as does psql's aligned output; that an estimate error is reported where it starts and where it grows rather than at every ancestor, never where a `LIMIT` or a semi join stopped a node early, never on the planner's one-row floor, and with fractional row counts compared as they are; that sort, incremental-sort, hash, hash-aggregate and stored-row spills, loop counts, filter and join-filter waste, heap fetches (a total, not per loop), JIT share and an estimates-only plan are recognised; and that a `TIMING OFF` plan is summarised without a ranking by time. To add a case, capture a new plan the same way and assert on its findings.
 
 To try `lint-on-save` against a real squawk, install it (see [install.md](install.md#host-toolchain)) and edit a migration in a repository that has a `.squawk.toml`.
 
