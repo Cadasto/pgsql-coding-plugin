@@ -1,0 +1,15 @@
+{
+  "enabledPlugins": {
+    "skill-creator@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(./scripts/validate.sh)",
+      "Bash(python3 scripts/validate.py)",
+      "Bash(./scripts/hooks-test.sh)"
+    ]
+  }
+}

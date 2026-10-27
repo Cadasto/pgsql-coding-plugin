@@ -1,0 +1,12 @@
+{
+  "name": "pgsql-coding",
+  "version": "0.1.0",
+  "description": "PostgreSQL coding standards for AI assistants: queries, jsonb, schema, indexing, performance analysis, safe migrations. PostgreSQL 18 and later.",
+  "author": {
+    "name": "Cadasto B.V.",
+    "url": "https://github.com/Cadasto"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Cadasto/pgsql-coding",
+  "keywords": ["postgresql", "sql", "jsonb", "indexing", "query-optimization", "migrations", "coding-standards"]
+}
