@@ -1,0 +1,10 @@
+HashAggregate  (cost=53567.00..60997.53 rows=39928 width=16) (actual time=55.129..113.846 rows=40000.00 loops=1)
+  Group Key: cid
+  Planned Partitions: 4  Batches: 85  Memory Usage: 169kB  Disk Usage: 11016kB
+  Buffers: shared hit=2942, temp read=2331 written=3447
+  ->  Seq Scan on o  (cost=0.00..5942.00 rows=300000 width=8) (actual time=0.015..15.871 rows=300000.00 loops=1)
+        Buffers: shared hit=2942
+Planning:
+  Buffers: shared hit=115
+Planning Time: 0.309 ms
+Execution Time: 115.661 ms

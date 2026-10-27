@@ -1,0 +1,24 @@
+Finalize Aggregate  (cost=6788.27..6788.28 rows=1 width=8) (actual time=39.998..42.015 rows=1.00 loops=1)
+  Buffers: shared hit=3276
+  ->  Gather  (cost=6788.05..6788.26 rows=2 width=8) (actual time=39.740..42.009 rows=2.00 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=3276
+        ->  Partial Aggregate  (cost=5788.05..5788.06 rows=1 width=8) (actual time=38.447..38.449 rows=1.00 loops=2)
+              Buffers: shared hit=3276
+              ->  Hash Join  (cost=617.00..5786.94 rows=444 width=0) (actual time=2.815..38.003 rows=10857.00 loops=2)
+                    Hash Cond: (o.cid = c.id)
+                    Join Filter: (((o.amt + (c.region)::numeric) % '7'::numeric) = '0'::numeric)
+                    Rows Removed by Join Filter: 64141
+                    Buffers: shared hit=3276
+                    ->  Parallel Seq Scan on o  (cost=0.00..4706.71 rows=176471 width=12) (actual time=0.009..7.644 rows=150000.00 loops=2)
+                          Buffers: shared hit=2942
+                    ->  Hash  (cost=367.00..367.00 rows=20000 width=12) (actual time=2.671..2.672 rows=20000.00 loops=2)
+                          Buckets: 32768  Batches: 1  Memory Usage: 1116kB
+                          Buffers: shared hit=334
+                          ->  Seq Scan on c  (cost=0.00..367.00 rows=20000 width=12) (actual time=0.010..1.074 rows=20000.00 loops=2)
+                                Buffers: shared hit=334
+Planning:
+  Buffers: shared hit=261
+Planning Time: 0.473 ms
+Execution Time: 42.080 ms

@@ -4,9 +4,11 @@
 Reads one plan in TEXT or JSON format (EXPLAIN (ANALYZE, BUFFERS) or EXPLAIN (ANALYZE,
 BUFFERS, FORMAT JSON)), from a file or stdin, including psql's aligned output with its
 "QUERY PLAN" header and "(N rows)" footer. Prints the totals, the nodes with the most exclusive
-time, and findings: row misestimates, sorts and hashes that spilled to disk, nodes run many
-times, filters that discard most rows, heap fetches in index-only scans, workers that did not
-launch, and JIT overhead. A plan without ANALYZE has estimates only, and says so.
+time, and findings: row misestimates (not where a LIMIT or a semi join stopped a node early),
+sorts, hashes and stored rows that spilled to disk, nodes run many times, filters and join
+filters that discard most rows, heap fetches in index-only scans, workers that did not launch,
+and JIT overhead. A plan without ANALYZE has estimates only, and a plan run with TIMING OFF
+has no ranking by time; both say so.
 
 The numbers are arithmetic on the plan, not a diagnosis: "time x loops" over-counts parallel
 nodes (each worker is a loop), and exclusive time is a node's time minus its children's.
@@ -27,10 +29,19 @@ NODE_RE = re.compile(
 SUMMARY_HEADS = ("Planning", "Execution Time", "JIT", "Triggers", "Trigger ", "Settings", "Serialization", "Query Identifier")
 
 
+# Nodes that read all their input before returning a row: an early stop above one does not reach below it.
+BLOCKING = {"Sort", "Hash", "Aggregate", "HashAggregate", "MixedAggregate", "HashSetOp"}
+# JSON names an aggregate or set operation by "Node Type" plus "Strategy"; TEXT uses one word.
+STRATEGY_NAMES = {"Aggregate": {"Plain": "Aggregate", "Sorted": "GroupAggregate", "Hashed": "HashAggregate",
+                                "Mixed": "MixedAggregate"},
+                  "SetOp": {"Sorted": "SetOp", "Hashed": "HashSetOp"}}
+
+
 class Node:
     def __init__(self, name, ref, est=None, rows=None, loops=None, total=None, never=False):
         self.name, self.ref, self.est, self.rows, self.loops = name, ref, est, rows, loops
         self.total, self.never, self.children, self.attrs = total, never, [], {}
+        self.early = False  # set by mark_early_stops
 
     @property
     def analyzed(self):
@@ -106,9 +117,14 @@ def parse_text(lines):
             m = re.search(r"Batches: \d+ \(originally (\d+)\)", body)
             if m:
                 attrs["Batches planned"] = int(m.group(1))
-            m = re.search(r"Sort Method: ([a-z -]+?)\s+(Disk|Memory): (\d+)kB", body)
-            if m and m.group(2) == "Disk":
-                attrs.setdefault("spill", []).append(f"{m.group(1)} {m.group(3)}kB on disk")
+            # A sort's "Disk: N", or an incremental sort group's "Average Disk: N  Peak Disk: N".
+            m = re.search(r"Sort Methods?: ([a-z, -]+?)  ", body)
+            disk = re.search(r"(?:Peak |  )Disk: (\d+)kB", body)
+            if m and disk:
+                attrs.setdefault("spill", []).append(f"{m.group(1)} {disk.group(1)}kB on disk")
+            m = re.match(r"Storage: Disk  Maximum Storage: (\d+)kB", body)  # tuplestore: Material, WindowAgg, CTE Scan
+            if m:
+                attrs.setdefault("spill", []).append(f"stored rows {m.group(1)}kB on disk")
             m = re.match(r"Buffers: (.*)", body)
             if m and "buffers" not in attrs:
                 attrs["buffers"] = m.group(1)
@@ -122,7 +138,13 @@ def parse_json(text):
 
     def build(p):
         counter[0] += 1
-        name = ("Parallel " if p.get("Parallel Aware") else "") + p.get("Node Type", "?")
+        kind = p.get("Node Type", "?")
+        kind = STRATEGY_NAMES.get(kind, {}).get(p.get("Strategy"), kind)
+        if p.get("Partial Mode") in ("Partial", "Finalize"):
+            kind = f"{p['Partial Mode']} {kind}"
+        if p.get("Join Type", "Inner") != "Inner":  # TEXT folds the join type into the name
+            kind = f"{kind.removesuffix(' Join')} {p['Join Type']} Join"
+        name = ("Parallel " if p.get("Parallel Aware") else "") + kind
         if p.get("Relation Name"):
             via = f" using {p['Index Name']}" if p.get("Index Name") else ""
             name += f"{via} on {p['Relation Name']}" + (f" {p['Alias']}" if p.get("Alias") not in (None, p["Relation Name"]) else "")
@@ -141,8 +163,17 @@ def parse_json(text):
             if p.get("Original Hash Batches", p["Hash Batches"]) != p["Hash Batches"]:
                 a["Batches planned"] = p["Original Hash Batches"]
         for s in [p] + list(p.get("Workers", [])):
+            if s.get("HashAgg Batches", 1) > 1:
+                a["Batches"] = max(a.get("Batches", 0), s["HashAgg Batches"])
             if s.get("Sort Space Type") == "Disk":
                 a.setdefault("spill", []).append(f"{s.get('Sort Method')} {s.get('Sort Space Used')}kB on disk")
+            for group in ("Full-sort Groups", "Pre-sorted Groups"):  # incremental sort
+                g = s.get(group) or {}
+                if g.get("Sort Space Disk"):
+                    a.setdefault("spill", []).append(f"{', '.join(g.get('Sort Methods Used', []))} "
+                                                     f"{g['Sort Space Disk']['Peak Sort Space Used']}kB on disk")
+        if p.get("Storage") == "Disk":
+            a.setdefault("spill", []).append(f"stored rows {p.get('Maximum Storage')}kB on disk")
         if "Shared Hit Blocks" in p:
             a["buffers"] = (f"shared hit={p['Shared Hit Blocks']} read={p.get('Shared Read Blocks', 0)}"
                             + (f", temp read={p['Temp Read Blocks']} written={p['Temp Written Blocks']}"
@@ -163,20 +194,40 @@ def walk(node):
         yield from walk(c)
 
 
+def mark_early_stops(node, early=False):
+    """Flag nodes that may stop before returning every row: below a Limit, and on the inner side of
+    a nested-loop semi or anti join, which moves on after the first match. Their actual rows fall
+    short of an estimate made for a full run with no estimation error. The early stop does not reach
+    below a node that reads all its input first, such as a Sort or a Hash."""
+    node.early = early
+    passes = node.name == "Limit" or (early and re.sub(r"^(Partial|Finalize) ", "", node.name) not in BLOCKING)
+    single_match = node.name.startswith("Nested Loop") and re.search(r" (Semi|Anti) Join$", node.name)
+    for i, c in enumerate(node.children):
+        mark_early_stops(c, passes or bool(single_match and i == 1))
+
+
 def misestimate(n):
     """(ratio, direction) when actual and estimated rows per loop differ tenfold or more on a node
-    that handled enough rows to matter; None otherwise."""
+    that handled enough rows to matter; None otherwise. A node that returned nothing counts as one
+    row over all its loops. An overestimate needs an estimate above one row, because the planner
+    never estimates fewer (clamp_row_est), and a node that stopped early has none."""
     if not n.analyzed or n.never:
         return None
     est, rows, loops = n.est or 0.0, n.rows or 0.0, n.loops or 1
-    hi, lo = max(est, rows), max(min(est, rows), 1.0)
-    if hi / lo >= 10 and hi * loops >= 1000:
-        return hi / lo, ("under" if rows > est else "over")
-    return None
+    if max(est, rows) * loops < 1000:
+        return None
+    if rows > est:
+        ratio, way = (rows / est if est else rows * loops), "under"
+    elif est > 1 and not n.early:
+        ratio, way = est / (rows or 1 / loops), "over"
+    else:
+        return None
+    return (ratio, way) if ratio >= 10 else None
 
 
 def findings(root, summary):
     out, carried = [], []
+    mark_early_stops(root)
     for n in walk(root):
         if not n.analyzed or n.never:
             continue
@@ -202,15 +253,19 @@ def findings(root, summary):
                        if "Batches planned" in a else f"{a['Batches']} batches")
             out.append((50, f"[{n.ref}] hash spilled to disk, {planned}: {n.name}"))
         if loops >= 1000 and n is not root:
-            out.append((loops / 100, f"[{n.ref}] runs {loops:,} times: {n.name}, {n.total:g} ms each = "
-                                     f"{n.work_ms:.1f} ms of work"))
-        removed = a.get("Rows Removed by Filter", 0) * loops
+            each = f", {n.total:g} ms each = {n.work_ms:.1f} ms of work" if n.total is not None else ""
+            out.append((loops / 100, f"[{n.ref}] runs {loops:,} times: {n.name}{each}"))
+        # Both counts are averages per loop. A join filter runs before the node's filter, so the rows
+        # it passed are the rows kept plus the rows the filter then removed.
         kept = rows * loops
-        if removed >= 10000 and removed / (removed + kept) >= 0.5:
-            out.append((removed / 10000, f"[{n.ref}] filter discards {removed:,.0f} of {removed + kept:,.0f} rows "
-                                         f"({removed / (removed + kept):.0%}): {n.name}"))
-        if "Index Only" in n.name and a.get("Heap Fetches", 0) * loops >= 1000:
-            out.append((5, f"[{n.ref}] index-only scan fetched {a['Heap Fetches'] * loops:,} heap rows "
+        filtered = a.get("Rows Removed by Filter", 0) * loops
+        for what, removed, passed in (("filter", filtered, kept),
+                                      ("join filter", a.get("Rows Removed by Join Filter", 0) * loops, kept + filtered)):
+            if removed >= 10000 and removed / (removed + passed) >= 0.5:
+                out.append((removed / 10000, f"[{n.ref}] {what} discards {removed:,.0f} of {removed + passed:,.0f} "
+                                             f"rows ({removed / (removed + passed):.0%}): {n.name}"))
+        if "Index Only" in n.name and a.get("Heap Fetches", 0) >= 1000:  # a total over all loops
+            out.append((5, f"[{n.ref}] index-only scan fetched {a['Heap Fetches']:,} heap rows "
                            f"(visibility map not set): {n.name}"))
         if a.get("Workers Launched", a.get("Workers Planned", 0)) < a.get("Workers Planned", 0):
             out.append((5, f"[{n.ref}] {a['Workers Launched']} of {a['Workers Planned']} planned workers launched: {n.name}"))
@@ -250,13 +305,16 @@ def main():
         return 0
     if not any(n.attrs.get("buffers") for n in nodes):
         print("No Buffers lines: add BUFFERS to see shared hit, read and temp blocks.")
-    print(f"\nTop {min(args.top, len(nodes))} nodes by exclusive time (time x loops, children subtracted; "
-          f"parallel workers each count as a loop):")
-    ranked = sorted((n for n in nodes if n.analyzed and not n.never), key=lambda n: -n.exclusive_ms)
-    for i, n in enumerate(ranked[:args.top], 1):
-        buf = f"; buffers {n.attrs['buffers']}" if n.attrs.get("buffers") else ""
-        print(f"  {i}. [{n.ref}] {n.name}: {n.exclusive_ms:.1f} ms exclusive, {n.work_ms:.1f} ms with children, "
-              f"rows {n.rows:g} (est {n.est:g}), loops {n.loops}{buf}")
+    if not any(n.total is not None for n in nodes):
+        print("\nNo per-node times (TIMING OFF), so no ranking by time; the row findings below still hold.")
+    else:
+        print(f"\nTop {min(args.top, len(nodes))} nodes by exclusive time (time x loops, children subtracted; "
+              f"parallel workers each count as a loop):")
+        ranked = sorted((n for n in nodes if n.analyzed and not n.never), key=lambda n: -n.exclusive_ms)
+        for i, n in enumerate(ranked[:args.top], 1):
+            buf = f"; buffers {n.attrs['buffers']}" if n.attrs.get("buffers") else ""
+            print(f"  {i}. [{n.ref}] {n.name}: {n.exclusive_ms:.1f} ms exclusive, {n.work_ms:.1f} ms with children, "
+                  f"rows {n.rows:g} (est {n.est:g}), loops {n.loops}{buf}")
     found = findings(root, summary)
     print("\nFindings:" if found else "\nFindings: none of the mechanical checks fired.")
     for f in found:

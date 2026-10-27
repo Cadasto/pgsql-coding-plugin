@@ -1,0 +1,9 @@
+Limit  (cost=0.42..1.10 rows=10 width=28) (actual time=0.016..0.022 rows=10.00 loops=1)
+  Buffers: shared hit=10
+  ->  Index Scan using o_pkey on o  (cost=0.42..20183.80 rows=300000 width=28) (actual time=0.015..0.021 rows=10.00 loops=1)
+        Index Searches: 1
+        Buffers: shared hit=10
+Planning:
+  Buffers: shared hit=107
+Planning Time: 0.253 ms
+Execution Time: 0.042 ms

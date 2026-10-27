@@ -1,0 +1,15 @@
+Limit  (cost=4138.09..17801.14 rows=100000 width=8) (actual time=8.610..49.978 rows=100000.00 loops=1)
+  Buffers: shared hit=5320 read=104, temp read=508 written=664
+  ->  Incremental Sort  (cost=4138.09..45127.26 rows=300000 width=8) (actual time=8.608..45.199 rows=100000.00 loops=1)
+        Sort Key: k, v
+        Presorted Key: k
+        Full-sort Groups: 4  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB
+        Pre-sorted Groups: 4  Sort Method: external merge  Average Disk: 576kB  Peak Disk: 576kB
+        Buffers: shared hit=5320 read=104, temp read=508 written=664
+        ->  Index Scan using t2_k on t2  (cost=0.42..10808.04 rows=300000 width=8) (actual time=0.039..14.984 rows=120001.00 loops=1)
+              Index Searches: 1
+              Buffers: shared hit=5313 read=104
+Planning:
+  Buffers: shared hit=67
+Planning Time: 0.231 ms
+Execution Time: 52.758 ms

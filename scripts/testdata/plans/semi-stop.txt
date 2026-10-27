@@ -1,0 +1,15 @@
+Aggregate  (cost=9327.03..9327.04 rows=1 width=8) (actual time=15.998..16.000 rows=1.00 loops=1)
+  Buffers: shared hit=60161 read=7
+  ->  Nested Loop Semi Join  (cost=0.42..9317.03 rows=4000 width=0) (actual time=0.035..15.812 rows=4000.00 loops=1)
+        Buffers: shared hit=60161 read=7
+        ->  Seq Scan on c  (cost=0.00..367.00 rows=20000 width=4) (actual time=0.005..0.954 rows=20000.00 loops=1)
+              Buffers: shared hit=167
+        ->  Index Only Scan using t2_k on t2  (cost=0.42..525.47 rows=30000 width=4) (actual time=0.001..0.001 rows=0.20 loops=20000)
+              Index Cond: (k = c.region)
+              Heap Fetches: 0
+              Index Searches: 20000
+              Buffers: shared hit=59994 read=7
+Planning:
+  Buffers: shared hit=182
+Planning Time: 0.480 ms
+Execution Time: 16.040 ms
