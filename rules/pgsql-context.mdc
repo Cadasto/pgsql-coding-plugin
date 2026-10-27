@@ -6,7 +6,7 @@ alwaysApply: false
 
 # PostgreSQL coding standards
 
-This Cursor rule mirrors the `pgsql-coding` router skill. Apply it when editing SQL, and when a Go or PHP change carries SQL text. Two principles:
+This Cursor rule mirrors the `pgsql-coding` router skill and attaches to `.sql` files only; for SQL inside a `.go` or `.php` file, read the `pgsql-query` skill or the sibling the change needs. Two principles:
 
 - **Evidence beats reasoning.** A plan from `EXPLAIN (ANALYZE, BUFFERS)` decides whether an index or a rewrite helps. `squawk` decides whether a migration takes a dangerous lock. `plpgsql_check` finds PL/pgSQL errors. Run the tool; do not reason out what it decides.
 - **The floor is PostgreSQL 18.** PostgreSQL 19 additions are hints until the project's server runs 19. The router's `versions.md` reference lists what needs 17, 18 or 19.
@@ -23,7 +23,7 @@ This Cursor rule mirrors the `pgsql-coding` router skill. Apply it when editing 
 
 ## Route, then load
 
-This rule is an index, not the standard. Before writing or reviewing SQL, open the focused skill matching the change. It carries the cited rules and the judgment:
+This rule is an index, not the standard. Before writing or reviewing SQL, read the focused skill matching the change: `<plugin root>/skills/<name>/SKILL.md`, with the install path the session-start line prints (`/<name>` opens it in chat), never `skills/` in the user's repository. It carries the cited rules and the judgment:
 
 - a query, a SQL string in `.go` or `.php` code, `JOIN`, `GROUP BY`, `ON CONFLICT`, `MERGE`, `COPY`, `FOR UPDATE`, `pg_advisory_*`, a transaction, `pgx.`, `pgxpool.`, `PDO` → `pgsql-query`
 - `jsonb`, `json`, `->`, `->>`, `@>`, `@?`, a `jsonb_*` or `JSON_*` function, `json.RawMessage` in a scan → `pgsql-jsonb`
@@ -34,11 +34,11 @@ This rule is an index, not the standard. Before writing or reviewing SQL, open t
 
 ## Reading a plan
 
-Summarise a plan before reading it: `python3 skills/pgsql-performance/scripts/plan-summary.py plan.txt`, from the plugin root, prints where the time goes and where a row-estimate error starts. For a plan over about 50 lines or two plans to compare, use the `pgsql-plan-analyst` agent with the plan in a file.
+Summarise a plan before reading it: `python3 "<plugin root>/skills/pgsql-performance/scripts/plan-summary.py" plan.txt` prints where the time goes and where a row-estimate error starts. For a plan over about 50 lines or two plans to compare, use the `pgsql-plan-analyst` agent with the plan in a file.
 
 ## Reviewing SQL
 
-For a focused review of `.sql` files, migrations or query strings in Go or PHP code, use the `pgsql-reviewer` agent. It loads the skills, returns findings ranked by severity, and edits nothing.
+For a focused review of `.sql` files, migrations or query strings in Go or PHP code, use the `pgsql-reviewer` agent. It reads the skills, returns findings ranked by severity, and edits nothing.
 
 ## Running SQL against a database
 
@@ -60,4 +60,4 @@ Anything a person reads goes in plain English, with the effect before the mechan
 
 When two forms return the same rows and both pass the tools, decide by: correct under NULLs and concurrent writes, then the measured plan on realistic data, then the form the PostgreSQL manual documents for that purpose, then the shorter statement. Say which of these decided it.
 
-Ground every judgment in a cited source: the PostgreSQL 18 manual, the release notes, the PostgreSQL wiki, the pgx and PDO documentation, and the squawk rule catalogue. Do not invent rules. Adopt the shipped squawk config (`references/squawk.toml`, at the **plugin root**; search the installed plugin directory for it, not this rule's own folder).
+Ground every judgment in a cited source: the PostgreSQL 18 manual, the release notes, the PostgreSQL wiki, the pgx and PDO documentation, and the squawk rule catalogue. Do not invent rules. Adopt the shipped squawk config (`references/squawk.toml` at the **plugin root**, beside `skills/`; `/pgsql-lint-setup` writes it into a repository).

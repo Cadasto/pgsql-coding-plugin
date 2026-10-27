@@ -29,6 +29,8 @@ chk "banner names the plan analyst"        "$(banner "$t/sql-only")" "pgsql-plan
 chk "banner states the version floor"      "$(banner "$t/sql-only")" "PostgreSQL 18 floor"
 chk "no squawk config offers lint setup"   "$(banner "$t/sql-only")" "/pgsql-lint-setup"
 chk_absent "squawk config omits lint setup" "$(banner "$t/with-squawk")" "/pgsql-lint-setup"
+chk "Claude banner loads skills by name"  "$(banner "$t/sql-only")" "Load pgsql-coding then the skill for the change (pgsql-query"
+chk_absent "Claude banner names no file path" "$(banner "$t/sql-only")" "SKILL.md"
 chk_silent "go repo without pgx is silent" "$(banner "$t/go-plain")"
 chk_silent "unrelated repo is silent"      "$(banner "$t/none")"
 for d in go-pgx none; do
@@ -40,10 +42,19 @@ done
 cursor_banner() { (cd "$t/none" && CURSOR_PLUGIN_ROOT="$t/none" CURSOR_PROJECT_DIR="$1" bash "$here/hooks/session-start.sh"); }
 out="$(cursor_banner "$t/go-pgx")"
 chk "Cursor: the workspace, not the plugin directory, is inspected" "$out" '{"additional_context":"› PostgreSQL workspace'
+for sk in pgsql-coding pgsql-query pgsql-jsonb pgsql-schema pgsql-indexing pgsql-performance pgsql-migrations; do
+  chk "Cursor banner names $sk" "$out" "$sk"
+done
+chk "Cursor banner gives the skills' install path" "$out" "$t/none/skills/<name>/SKILL.md"
 if command -v python3 >/dev/null 2>&1; then
   if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "Cursor: session-start emits valid JSON"; else fail "Cursor: session-start emits valid JSON: '$out'"; fi
 fi
 chk_silent "Cursor: a workspace without PostgreSQL is silent" "$(cursor_banner "$t/go-plain")"
+# The install path comes from outside the script, so it is JSON-escaped.
+out="$(cd "$t/none" && CURSOR_PLUGIN_ROOT='/opt/a"b' CURSOR_PROJECT_DIR="$t/go-pgx" bash "$here/hooks/session-start.sh")"
+if command -v python3 >/dev/null 2>&1; then
+  if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "Cursor: a quote in the install path stays valid JSON"; else fail "Cursor: a quote in the install path stays valid JSON: '$out'"; fi
+fi
 
 # --- skill-nudge -------------------------------------------------------------------------------
 # p_edit/p_write mirror a real Claude Code PostToolUse payload (hook_event_name, tool_input with
@@ -111,13 +122,51 @@ chk "hook_event_name delivers additionalContext" "$out" '{"hookSpecificOutput":{
 clean "$s5"
 s6="pg-test-cursor-$$"; clean "$s6"
 out="$(printf '%s' "$(p_cursor "$s6" "$t/repo/j.sql")" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
-chk "Cursor gets additional_context, matched on the file" "$out" '{"additional_context":"› pgsql-coding: this file touches JSON or jsonb; load pgsql-coding:pgsql-jsonb'
+chk "Cursor gets additional_context, matched on the file" "$out" "{\"additional_context\":\"› pgsql-coding: this file touches JSON or jsonb; read the pgsql-jsonb skill, $here/skills/pgsql-jsonb/SKILL.md,"
 if command -v python3 >/dev/null 2>&1; then
   if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "Cursor: skill-nudge emits valid JSON"; else fail "Cursor: skill-nudge emits valid JSON: '$out'"; fi
 fi
 chk_silent "Cursor nudges once per conversation_id" \
   "$(printf '%s' "$(p_cursor "$s6" "$t/repo/j.sql")" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
 clean "$s6"
+
+# StrReplace carries new_string, so Cursor classifies the added text. A relative path is joined
+# to CURSOR_PROJECT_DIR because the hook runs in the plugin install, not the workspace.
+p_cursor_edit() { # CONVERSATION FILE NEW
+  printf '{"conversation_id":"%s","hook_event_name":"postToolUse","cursor_version":"1.7.2","workspace_roots":["/w"],"user_email":null,"transcript_path":null,"tool_name":"StrReplace","tool_input":{"path":"%s","old_string":"x","new_string":"%s"},"tool_output":"{}","duration":1}' \
+    "$1" "$2" "$3"
+}
+printf 'SELECT 1;\n' > "$t/repo/plain.sql"
+s7="pg-test-strreplace-$$"; clean "$s7"
+out="$(printf '%s' "$(p_cursor_edit "$s7" "$t/repo/plain.sql" 'CREATE INDEX ON t (a);')" | env -u CLAUDE_PLUGIN_ROOT bash "$here/hooks/skill-nudge.sh")"
+chk "Cursor StrReplace nudges from new_string" "$out" 'this edit touches an index; read the pgsql-indexing skill'
+clean "$s7"
+printf "SELECT doc->>'k' FROM t;\n" > "$t/repo/rel.sql"
+s8="pg-test-rel-$$"; clean "$s8"
+out="$(cd "$t/none" && printf '%s' "$(p_cursor_edit "$s8" "rel.sql" 'SELECT 1;')" | env -u CLAUDE_PLUGIN_ROOT -u CURSOR_PROJECT_DIR bash "$here/hooks/skill-nudge.sh")"
+chk_silent "relative Cursor path without CURSOR_PROJECT_DIR is silent" "$out"
+out="$(printf '%s' "$(p_cursor_edit "$s8" "rel.sql" 'SELECT 1;')" | env -u CLAUDE_PLUGIN_ROOT CURSOR_PROJECT_DIR="$t/repo" bash "$here/hooks/skill-nudge.sh")"
+chk "relative Cursor path is joined to CURSOR_PROJECT_DIR" "$out" 'this edit touches a SQL statement; read the pgsql-query skill'
+clean "$s8"
+s9="pg-test-abs-$$"; clean "$s9"
+out="$(printf '%s' "$(p_cursor_edit "$s9" "$t/repo/plain.sql" 'SELECT 1;')" | env -u CLAUDE_PLUGIN_ROOT CURSOR_PROJECT_DIR="$t/none" bash "$here/hooks/skill-nudge.sh")"
+chk "absolute Cursor path ignores CURSOR_PROJECT_DIR" "$out" 'read the pgsql-query skill'
+clean "$s9"
+s10="pg-test-quote-$$"; clean "$s10"
+out="$(printf '%s' "$(p_cursor_edit "$s10" "$t/repo/plain.sql" 'SELECT 1;')" | env -u CLAUDE_PLUGIN_ROOT CURSOR_PLUGIN_ROOT='/opt/a"b' bash "$here/hooks/skill-nudge.sh")"
+if command -v python3 >/dev/null 2>&1; then
+  if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "Cursor: a quote in the install path stays valid JSON (nudge)"; else fail "Cursor: a quote in the install path stays valid JSON (nudge): '$out'"; fi
+fi
+clean "$s10"
+
+# The added text arrives JSON-escaped, so a keyword after a line break follows "\n", not a word
+# edge. Multi-line edits are the usual StrReplace and Edit shape.
+s11="pg-test-multiline-$$"; clean "$s11"; clean "$s11-ddl"
+chk "keyword on a later line still nudges" \
+  "$(nudge p "$(p_edit "$s11" "$t/repo/q.sql" '' '-- fetch the user\nSELECT id FROM users WHERE id = $1;')")" "pgsql-coding:pgsql-query"
+chk "keywords split across lines still nudge" \
+  "$(nudge q "$(p_edit "$s11-ddl" "$t/repo/q.sql" '' 'ALTER\n  TABLE t ADD COLUMN c int;')")" "pgsql-coding:pgsql-migrations"
+clean "$s11"; clean "$s11-ddl"
 
 # --- lint-on-save ------------------------------------------------------------------------------
 # A stub squawk on PATH prints gcc-style findings (plus a quote, a backslash and a colour code
@@ -138,15 +187,21 @@ out="$(lint "$(p_write lint "$t/lint/migrations/0002.sql" 'x')")"; st=$?
 [ "$st" -eq 0 ] && ok "lint-on-save exits 0 on findings" || fail "lint-on-save exits 0 on findings: exited $st"
 chk "findings reach the model as additionalContext" "$out" '"additionalContext":"› pgsql-coding: squawk reports on 0002.sql'
 chk "the finding names the squawk rule"             "$out" "require-concurrent-index-creation"
+chk "Claude Code lint loads the namespaced skill"   "$out" "load pgsql-coding:pgsql-migrations"
 chk_absent "colour codes are stripped"              "$out" "[31m"
 if command -v python3 >/dev/null 2>&1; then
   if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "lint-on-save emits valid JSON"; else fail "lint-on-save emits valid JSON: '$out'"; fi
 fi
 out="$(printf '%s' "$(p_cursor cur "$t/lint/migrations/0002.sql")" | env -u CLAUDE_PLUGIN_ROOT PATH="$t/bin:$PATH" bash "$here/hooks/lint-on-save.sh")"
 chk "Cursor: findings reach the model as additional_context" "$out" '{"additional_context":"› pgsql-coding: squawk reports on 0002.sql'
+chk "Cursor lint names the skill's install path" "$out" "read the pgsql-migrations skill, $here/skills/pgsql-migrations/SKILL.md,"
 if command -v python3 >/dev/null 2>&1; then
   if printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then ok "Cursor: lint-on-save emits valid JSON"; else fail "Cursor: lint-on-save emits valid JSON: '$out'"; fi
 fi
+out="$(cd "$t/none" && printf '%s' "$(p_cursor_edit lintrel "migrations/0002.sql" 'x')" | env -u CLAUDE_PLUGIN_ROOT CURSOR_PROJECT_DIR="$t/lint" PATH="$t/bin:$PATH" bash "$here/hooks/lint-on-save.sh")"
+chk "Cursor: a relative path is linted under CURSOR_PROJECT_DIR" "$out" 'squawk reports on 0002.sql; read the pgsql-migrations skill'
+out="$(printf '%s' "$(p_cursor cur "$t/lint/migrations/0002.sql")" | env -u CLAUDE_PLUGIN_ROOT CURSOR_PROJECT_DIR="$t/nolint" PATH="$t/bin:$PATH" bash "$here/hooks/lint-on-save.sh")"
+chk "Cursor: an absolute path ignores CURSOR_PROJECT_DIR" "$out" 'squawk reports on 0002.sql'
 chk_silent "no .squawk.toml means no lint" "$(lint "$(p_write lint "$t/nolint/0002.sql" 'x')")"
 chk_silent "non-SQL file is not linted"    "$(lint "$(p_write lint "$t/repo/notes.md" 'x')")"
 out="$(CLAUDE_FILE_PATH="$t/lint/migrations/0002.sql" PATH=/nonexistent "$BASH" "$here/hooks/lint-on-save.sh" </dev/null 2>&1)"; st=$?

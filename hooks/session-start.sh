@@ -33,8 +33,17 @@ uses_postgres() {
 if uses_postgres; then
   lint=" · /pgsql-lint-setup adds squawk (no .squawk.toml found)"
   [ -e .squawk.toml ] && lint=""
-  # A fixed literal with no quotes or backslashes, so the JSON form needs no escaping.
-  line="› PostgreSQL workspace: pgsql-coding (PostgreSQL 18 floor, 19 as hints). Load pgsql-coding then the skill for the change (pgsql-query · pgsql-jsonb · pgsql-schema · pgsql-indexing · pgsql-performance · pgsql-migrations); pgsql-reviewer for a review, pgsql-plan-analyst for a long EXPLAIN plan${lint}. EXPLAIN (ANALYZE, BUFFERS) before proposing an index or rewrite; squawk on migrations."
+  # One skill list for both hosts, so the validator's routing check covers both lines. Fixed
+  # literals with no quotes or backslashes; only the Cursor plugin path needs JSON escaping.
+  skills="pgsql-query · pgsql-jsonb · pgsql-schema · pgsql-indexing · pgsql-performance · pgsql-migrations"
+  if [ -n "$cursor" ]; then
+    # Cursor has no Skill tool: give the model, and the briefs it writes for subagents, the
+    # absolute path of each skill in the plugin install.
+    root="$(printf '%s' "${CURSOR_PLUGIN_ROOT%/}" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+    line="› PostgreSQL workspace: pgsql-coding (PostgreSQL 18 floor, 19 as hints). Read the pgsql-coding skill, then the skill for the change (${skills}); each is ${root}/skills/<name>/SKILL.md, and a subagent brief passes that path. pgsql-reviewer for a review, pgsql-plan-analyst for a long EXPLAIN plan${lint}. EXPLAIN (ANALYZE, BUFFERS) before proposing an index or rewrite; squawk on migrations."
+  else
+    line="› PostgreSQL workspace: pgsql-coding (PostgreSQL 18 floor, 19 as hints). Load pgsql-coding then the skill for the change (${skills}); pgsql-reviewer for a review, pgsql-plan-analyst for a long EXPLAIN plan${lint}. EXPLAIN (ANALYZE, BUFFERS) before proposing an index or rewrite; squawk on migrations."
+  fi
   if [ -n "$cursor" ]; then
     printf '{"additional_context":"%s"}\n' "$line"
   else

@@ -12,13 +12,13 @@ allowed-tools:
 
 # pgsql-lint-setup: the reference squawk config
 
-> **The shipped config is at the plugin root**, `references/squawk.toml` (beside `skills/`, two levels above this file), not under this skill. Read it as `${CLAUDE_PLUGIN_ROOT}/references/squawk.toml` on Claude Code, as `../../references/squawk.toml` from this skill's directory, or Glob for the installed `references/squawk.toml`. The block below is the same file.
+> **Write the block below.** It is the same text as `references/squawk.toml` at the plugin root (beside `skills/`). To compare with the shipped file, read `../../references/squawk.toml` from this skill's directory. On Claude Code that file is also `${CLAUDE_PLUGIN_ROOT}/references/squawk.toml`. Do not Glob the user's repository for it.
 
 Scope: write squawk's config into a repository and report how to run it, in one interaction. squawk lints migration files for statements that block reads or writes or break running clients ([squawk rules](https://squawkhq.com/docs/rules)).
 
 Deterministic backstop: `squawk` itself; this skill only configures it.
 
-`$ARGUMENTS` is an optional directory. Default is the repository root. Call that directory `$ROOT` below.
+`$ARGUMENTS` is an optional directory on Claude Code. On Cursor, `argument-hint`, `allowed-tools` and `$ARGUMENTS` are not applied: take an optional directory from the user's message. Default on both hosts is the repository root. Call that directory `$ROOT` below.
 
 ## Steps
 
